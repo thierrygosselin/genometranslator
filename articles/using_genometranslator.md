@@ -1,0 +1,483 @@
+# Reading and translating genomic data
+
+``` r
+
+library(genometranslator)
+```
+
+## Overview
+
+`genometranslator` separates data translation from data filtering.
+Reader functions import genomic files and standardize their sample,
+marker, and genotype information. Writer functions translate those data
+to another format; they do not silently filter markers or individuals.
+The user is responsible for quality control and for preparing data that
+are appropriate for the intended downstream analysis.
+
+There are two ways to read or write data:
+
+- [`read_genome()`](https://thierrygosselin.github.io/genometranslator/reference/read_genome.md)
+  and
+  [`write_genome()`](https://thierrygosselin.github.io/genometranslator/reference/write_genome.md)
+  provide a simple interface and select a format-specific function
+  automatically;
+- functions such as
+  [`read_vcf()`](https://thierrygosselin.github.io/genometranslator/reference/read_vcf.md),
+  [`read_dart()`](https://thierrygosselin.github.io/genometranslator/reference/read_dart.md),
+  and
+  [`write_bayescan()`](https://thierrygosselin.github.io/genometranslator/reference/write_bayescan.md)
+  expose arguments specific to a particular format.
+
+The examples below are not evaluated because they refer to files
+supplied by the user.
+
+**It all starts with a well-maintained sample metadata file.**
+
+## Maintain the sample metadata first
+
+The sample metadata table is the authoritative record describing the
+samples used in a project. It can be maintained in Excel, LibreOffice,
+Google Sheets, R, a database, or another suitable tool. The software
+matters less than using a consistent tabular structure and preserving
+the file carefully.
+
+The tidy-data principles emphasized throughout [R for Data
+Science](https://r4ds.hadley.nz) by Hadley Wickham, Mine
+Çetinkaya-Rundel, and Garrett Grolemund are particularly useful:
+
+- each row represents one sample;
+- each column represents one variable;
+- each cell contains one value;
+- each type of observational unit is stored in its own table.
+
+For example, sampling site, collection year, sex, sequencing batch,
+original sample identifier, standardized sample identifier, and DArT
+`TARGET_ID` should be separate columns. Do not combine several variables
+in one cell, use merged cells or multiple header rows, or encode
+information only with colours, fonts, or comments. Column names should
+be unique and stable, and missing values should be represented
+consistently.
+
+When using spreadsheet software, format identifier columns as text so
+that leading zeros are preserved. Avoid formulas in the final exchange
+table and export a tab-delimited text file for use with R. Keep the
+complete spreadsheet or metadata table as the long-term record; exported
+strata files can always be regenerated from it.
+
+The metadata table is also the authoritative place to document original
+and standardized identifiers, along with the reason or date for a name
+change. The strata file should not be used to maintain that history.
+
+## Prepare the strata file
+
+Once the metadata are in good order, generate the strata file needed for
+the genomic import or analysis. This small step prevents many
+difficult-to-diagnose matching problems later. A strata file is a
+compact, tab-delimited table with one row per sample and, for most
+formats, two required columns:
+
+- `INDIVIDUALS` is the unique, stable name used for each sample;
+- `STRATA` is the group to which the sample belongs for the current
+  analysis.
+
+For DArT data, a third column named `TARGET_ID` connects the names found
+in the original DArT report to the standardized names in `INDIVIDUALS`.
+
+### Standardize `INDIVIDUALS`
+
+Good sample identifiers are meaningful, unique, and stable. Avoid
+identifiers such as `1`, `2`, and `3`: they contain no context, are
+easily confused with row numbers, and may change when a table is sorted.
+Prefer an identifier such as `GWH-TAS-2025-001`, where each component
+has a documented meaning.
+
+Useful practices include:
+
+- record the identifier found in the genotype file and its standardized
+  replacement in the sample metadata table;
+- join existing metadata columns when necessary, for example species,
+  sampling site, year, and a within-site sample number;
+- use the same component order and separator for every sample;
+- prefer hyphens (`-`) as separators; underscores can become visually
+  unclear when identifiers are underlined or printed, and periods (`.`)
+  can be altered by some R functions;
+- avoid spaces, accented characters, slashes, and other punctuation;
+- keep capitalization consistent and preserve meaningful leading zeros;
+- verify that identifiers are unique, non-missing, and match the
+  genotype data exactly.
+
+Suppose the complete sample metadata are stored in `sample_metadata.tsv`
+with columns named `SPECIES`, `SITE`, `YEAR`, `SAMPLE_NUMBER`, and
+`REGION`. A compact strata file can be generated as follows:
+
+``` r
+
+sample_metadata <- readr::read_tsv(
+  "sample_metadata.tsv",
+  col_types = readr::cols(.default = readr::col_character())
+)
+
+strata <- sample_metadata |>
+  dplyr::mutate(
+    INDIVIDUALS = paste(SPECIES, SITE, YEAR, REGION, SAMPLE_NUMBER, sep = "-"),
+    STRATA = REGION
+  ) |>
+  dplyr::select(INDIVIDUALS, STRATA)
+
+stopifnot(
+  !anyNA(strata$INDIVIDUALS),
+  !anyDuplicated(strata$INDIVIDUALS),
+  !anyNA(strata$STRATA)
+)
+
+readr::write_tsv(strata, "strata.tsv")
+```
+
+Read identifier-like columns as character data so that values such as
+`001` do not become `1`. Inspect the result before importing the genomic
+data:
+
+``` r
+
+strata
+dplyr::count(strata, STRATA)
+```
+
+### Renaming samples while reading a VCF
+
+For a VCF, sample identifiers can be changed during import by adding
+`NEW_ID` to the strata file. In this case, `INDIVIDUALS` must match the
+current sample identifier in the VCF exactly, and `NEW_ID` supplies the
+standardized identifier that will be written to the GDS object:
+
+``` text
+INDIVIDUALS  NEW_ID           STRATA
+Shark_1      GWH-TAS-2025-001 TAS
+Shark_2      GWH-VIC-2025-001 VIC
+Shark_3      GWH-TAS-2025-002 TAS
+```
+
+Generate this file from the authoritative metadata table rather than
+entering the correspondence manually in the strata file:
+
+``` r
+
+vcf_strata <- sample_metadata |>
+  dplyr::transmute(
+    INDIVIDUALS = VCF_ID,
+    NEW_ID = STANDARD_ID,
+    STRATA = REGION
+  )
+
+stopifnot(
+  !anyNA(vcf_strata),
+  !anyDuplicated(vcf_strata$INDIVIDUALS),
+  !anyDuplicated(vcf_strata$NEW_ID)
+)
+
+readr::write_tsv(vcf_strata, "vcf_strata.tsv")
+```
+
+Here, `VCF_ID` and `STANDARD_ID` are columns maintained in
+`sample_metadata.tsv`. If the identifiers already used in the VCF are
+suitable, omit `NEW_ID` and use the regular two-column strata file.
+
+### Keep `STRATA` simple
+
+`STRATA` represents the grouping needed for the current analysis, not
+the entire sample metadata record. Short acronyms such as `NTH` and
+`STH`, `POP1` and `POP2`, or site codes such as `TAS` and `VIC` are
+preferable. Long labels can make axes, legends, and facet labels
+unreadable when figure space is tight. Use a single consistent
+vocabulary: do not mix values such as `STH`, `South`, and `south`.
+
+If a hierarchical label is needed, use a documented and consistent
+structure such as `TAS-HOB` and `TAS-FRE`. Avoid packing every available
+variable into `STRATA`. Keep collection date, sex, life stage,
+coordinates, sequencing batch, and other descriptive fields in the
+complete sample metadata table. They can be joined to analysis results
+later using `INDIVIDUALS` as the key.
+
+Also check the following before saving the file:
+
+- every row represents one sample;
+- every sample needed for the analysis occurs exactly once;
+- samples absent from the strata file are intentionally excluded;
+- group names do not contain trailing spaces or inconsistent separators;
+- the file is written as tab-delimited text rather than an Excel
+  workbook.
+
+A plain-text editor that can display invisible characters is useful for
+the final inspection. For example, BBEdit can reveal tabs, spaces, and
+line endings, making accidental spaces, mixed delimiters, and hidden
+characters easier to find.
+
+## Reading a VCF file
+
+Suppose that `individuals.vcf.gz` contains the genotypes and
+`strata.tsv` contains sample assignments. A minimal strata table has one
+row per individual:
+
+``` text
+INDIVIDUALS  STRATA
+GWH-TAS-2025-001  TAS
+GWH-VIC-2025-001  VIC
+GWH-TAS-2025-002  TAS
+```
+
+Use
+[`read_vcf()`](https://thierrygosselin.github.io/genometranslator/reference/read_vcf.md)
+when VCF-specific control is wanted:
+
+``` r
+
+shark <- read_vcf(
+  data = "individuals.vcf.gz",
+  strata = "strata.tsv",
+  filename = "shark",
+  parallel.core = 8,
+  verbose = TRUE
+)
+```
+
+The function returns an open SeqArray GDS object. The GDS representation
+avoids materializing a very large genotype table in memory and is the
+preferred format for subsequent work in R.
+
+VCF files that are not ready for parallel access may need to be sorted,
+bgzip-compressed, and indexed. These preparation steps can require the
+optional `bcftools` executable. Check its visibility with:
+
+``` r
+
+Sys.which("bcftools")
+genometranslator_dependencies()
+```
+
+Use
+[`tidy_genome()`](https://thierrygosselin.github.io/genometranslator/reference/tidy_genome.md)
+only when an in-memory tidy table is needed:
+
+``` r
+
+shark_tidy <- tidy_genome(
+  data = shark,
+  parallel.core = 8
+)
+```
+
+## Reading DArT files
+
+DArT reports have changed over time, and the package recognizes several
+related layouts automatically:
+
+- **1row**: one row per SNP marker, with genotypes encoded as `0`, `1`,
+  `2`, or missing;
+- **2rows**: two rows per marker representing presence or absence of the
+  REF and ALT alleles;
+- **counts**: two rows per marker containing read counts or depth for
+  the REF and ALT alleles rather than genotype calls;
+- **silico.dart**: dominant SilicoDArT presence/absence markers without
+  REF and ALT alleles;
+- **silico.dart.counts**: SilicoDArT presence/absence information
+  accompanied by sequence counts.
+
+For DArT input, prepare a three-column strata file. `TARGET_ID` must
+match the identifier in the original DArT report, while `INDIVIDUALS`
+contains the stable, standardized name that will be used after import:
+
+``` text
+TARGET_ID  INDIVIDUALS       STRATA
+1002451    GWH-TAS-2025-001  TAS
+1002452    GWH-TAS-2025-002  TAS
+1002453    GWH-VIC-2025-001  VIC
+```
+
+When the DArT identifiers are difficult to locate, extract them directly
+from the report instead of editing the large genotype file manually:
+
+``` r
+
+dart_ids <- extract_dart_target_id(
+  data = "dart_counts.csv",
+  write = FALSE
+)
+```
+
+For DArT files, `INDIVIDUALS` must be generated by the user. This is the
+right time to create meaningful, standardized identifiers. After
+verifying which sample corresponds to each `TARGET_ID`, store that
+relationship permanently in the complete sample metadata table. Then use
+the `TARGET_ID` values extracted from the DArT report to select and join
+the corresponding metadata records. The DArT strata file is a small
+export of the three fields needed for import:
+
+``` r
+
+unmatched_dart_ids <- dart_ids |>
+  dplyr::anti_join(sample_metadata, by = "TARGET_ID")
+
+stopifnot(nrow(unmatched_dart_ids) == 0L)
+
+dart_strata <- dart_ids |>
+  dplyr::left_join(sample_metadata, by = "TARGET_ID") |>
+  dplyr::transmute(
+    TARGET_ID,
+    INDIVIDUALS = STANDARD_ID,
+    STRATA = REGION
+  )
+
+stopifnot(
+  !anyNA(dart_strata),
+  !anyDuplicated(dart_strata$TARGET_ID),
+  !anyDuplicated(dart_strata$INDIVIDUALS)
+)
+
+readr::write_tsv(dart_strata, "dart_strata.tsv")
+```
+
+Never infer this correspondence from row or column order alone. The
+optional metadata inspection features of
+[`extract_dart_target_id()`](https://thierrygosselin.github.io/genometranslator/reference/extract_dart_target_id.md)
+are described in that function’s documentation.
+
+[`detect_genomic_format()`](https://thierrygosselin.github.io/genometranslator/reference/detect_genomic_format.md)
+identifies the file as DArT, while
+[`detect_dart_format()`](https://thierrygosselin.github.io/genometranslator/reference/detect_dart_format.md)
+reports the particular DArT layout:
+
+``` r
+
+detect_genomic_format("dart_counts.csv")
+detect_dart_format("dart_counts.csv")
+```
+
+For a DArT count file, use:
+
+``` r
+
+dart_genome <- read_dart(
+  data = "dart_counts.csv",
+  strata = "dart_strata.tsv"
+)
+```
+
+The specialized
+[`read_dart()`](https://thierrygosselin.github.io/genometranslator/reference/read_dart.md)
+documentation describes additional DArT columns, metadata, and
+calibration options. Calling
+[`read_dart()`](https://thierrygosselin.github.io/genometranslator/reference/read_dart.md)
+directly is recommended when those choices need to be controlled.
+
+## The generic read and write interface
+
+When format-specific options are not required,
+[`read_genome()`](https://thierrygosselin.github.io/genometranslator/reference/read_genome.md)
+detects the input and calls the corresponding reader with its defaults.
+Only the shared `strata` argument needs to be supplied:
+
+``` r
+
+genome <- read_genome(
+  data = "individuals.vcf.gz",
+  strata = "strata.tsv",
+  parallel.core = 8,
+  verbose = TRUE
+)
+```
+
+The same entry point can be tried with a DArT, FSTAT, Genepop, GDS,
+PLINK, or package-native genomic file, and with `genind`, `genlight`, or
+`gtypes` objects:
+
+``` r
+
+dart_genome <- read_genome(
+  data = "dart_counts.csv",
+  strata = "dart_strata.tsv"
+)
+```
+
+[`write_genome()`](https://thierrygosselin.github.io/genometranslator/reference/write_genome.md)
+dispatches to a format-specific writer. Specify `output` explicitly when
+the filename extension is ambiguous:
+
+``` r
+
+write_genome(
+  data = genome,
+  output = "genepop",
+  filename = "shark",
+  verbose = TRUE
+)
+
+write_genome(
+  data = genome,
+  output = "vcf",
+  filename = "shark_filtered",
+  verbose = TRUE
+)
+```
+
+The name `shark_filtered.vcf` should only be used if `genome` was
+filtered before the call: the writer itself does not perform that
+filtering.
+
+When finished with an open GDS connection, close it with:
+
+``` r
+
+write_genome(genome)
+```
+
+With no output requested,
+[`write_genome()`](https://thierrygosselin.github.io/genometranslator/reference/write_genome.md)
+retains its GDS-management behavior: it synchronizes and closes the open
+connection.
+
+## Translating in one step
+
+[`genome_translator()`](https://thierrygosselin.github.io/genometranslator/reference/genome_translator.md)
+combines
+[`read_genome()`](https://thierrygosselin.github.io/genometranslator/reference/read_genome.md)
+and
+[`write_genome()`](https://thierrygosselin.github.io/genometranslator/reference/write_genome.md).
+For example, translate a VCF directly to Genepop using the default
+behavior of both format-specific functions:
+
+``` r
+
+genome_translator(
+  data = "individuals.vcf.gz",
+  strata = "strata.tsv",
+  output = "genepop",
+  filename = "shark",
+  parallel.core = 8,
+  verbose = TRUE
+)
+```
+
+This compact interface is appropriate when the defaults are suitable.
+For more control, split the operation into a specialized reader and
+writer:
+
+``` r
+
+genome <- read_vcf(
+  data = "individuals.vcf.gz",
+  strata = "strata.tsv",
+  vcf.stats = TRUE,
+  parallel.core = 8
+)
+
+write_genepop(
+  data = genome,
+  filename = "shark"
+)
+
+write_genome(genome) # synchronize and close the GDS connection
+```
+
+Always consult the selected reader and writer documentation for
+format-specific dependencies, validation rules, and data-preparation
+recommendations.

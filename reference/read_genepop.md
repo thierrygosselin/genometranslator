@@ -1,0 +1,205 @@
+# Read a Genepop file into a tidy or wide data frame
+
+Used internally in
+[genometranslator](https://github.com/thierrygosselin/genometranslator)
+and might be of interest for users. The function `read_genepop` reads a
+file in the [genepop
+format](https://genepop.curtin.edu.au/help_input.html) (see details and
+note for convention) and output a data frame in wide or long/tidy
+format.
+
+To manipulate and prune the dataset prior to tidying, use the functions
+[`tidy_genome`](https://thierrygosselin.github.io/genometranslator/reference/tidy_genome.md)
+and
+[`genome_translator`](https://thierrygosselin.github.io/genometranslator/reference/genome_translator.md),
+that uses blacklist and whitelist along several other filtering options.
+
+## Usage
+
+``` r
+read_genepop(
+  data,
+  strata = NULL,
+  tidy = TRUE,
+  filename = NULL,
+  verbose = FALSE
+)
+```
+
+## Arguments
+
+- data:
+
+  A [genepop](https://genepop.curtin.edu.au/help_input.html) filename
+  with extension `.gen`.
+
+- strata:
+
+  (optional) A tab delimited file with 2 columns. Header: `INDIVIDUALS`
+  and `STRATA`. The `STRATA` column can be any hierarchical grouping. To
+  create a strata file see
+  [`individuals2strata`](https://thierrygosselin.github.io/genometranslator/reference/individuals2strata.md).
+  Default: `strata = NULL`.
+
+- tidy:
+
+  (optional, logical) With `tidy = FALSE`, the markers are the variables
+  and the genotypes the observations (wide format). With the default:
+  `tidy = TRUE`, markers and genotypes are variables with their own
+  columns (long format). Default: `tidy = TRUE`.
+
+- filename:
+
+  (optional) The file name for the tidy data frame written to the
+  working directory. With the default, The tidy data is in the global
+  environment only (i.e. not written in the working directory). Default:
+  `filename = NULL`.
+
+- verbose:
+
+  Logical indicating whether progress messages are emitted. Default:
+  `verbose = FALSE`.
+
+## Value
+
+The output in your global environment is a wide or long/tidy data frame.
+If `filename` is provided, the wide or long/tidy data frame is also
+written to the working directory.
+
+## Details
+
+[genepop format](https://genepop.curtin.edu.au/help_input.html)
+
+1.  **First line:** This line is used to store information about your
+    data, any characters are allowed. This line is not kept inside
+    `read_genepop`.
+
+2.  **Second line:** 2 options i) wide: all the locus are stored on this
+    same line with comma (or a comma+space) separator; ii) long: the
+    name of the first locus (the remaining locus are on separate and
+    subsequent rows with the long format: not recommended with genomic
+    datasets with thousands of markers...).
+
+    The remaining lines are blocks of population and genotypes, [for
+    genepop format
+    examples](https://genepop.curtin.edu.au/help_input.html).
+
+3.  **population identifier:** The population block are separated by the
+    word: `POP`, or `Pop` or `pop`. Flavors of the genepop software uses
+    the first or the last identifier of every sub-population, in all
+    output files, to name populations [(more
+    info)](https://genepop.curtin.edu.au/help_input.html). This is not
+    very convenient for population naming and prone to errors, this is
+    where the `strata` argument inside `read_genepop` (described above)
+    becomes handy.
+
+4.  **individual identifier:** After the population identifier the
+    individuals that belong to the same population are found
+    subsequently on separate lines. The genepop format specify you can
+    use any character, including a blank space or tab. Spaces are
+    allowed in the identifier names. You may leave it blank except for a
+    comma if you wish. The comma between the individual identifier and
+    the list of genotypes is required. For good naming habit however the
+    function `read_genepop` will replace `"_", ":"` with `"-"`, the
+    comma `","` along any white space characters defined as
+    `"\t", "\n", "\f", "\r", "\p{Z}"` found in the individual name will
+    be trimmed.
+
+5.  **genotypes:** For each locus, genotypes are separated by one or
+    more blank spaces or tab. 0101 indicates that this individual is
+    homozygous for the 01 allele at the first locus. An alternative
+    input format exists, where each allele is coded by three digits
+    (instead of two as described above). However, the total number of
+    different alleles, for each locus, should not be higher than 99.
+    Missing data is coded with zeros: `0000 or 000000`.
+
+## Note
+
+[genepop format notes:](https://genepop.curtin.edu.au/help_input.html)
+
+- No constraint on blanks separating the various fields.
+
+- tabs or spaces allowed.
+
+- Loci names can appear on separate lines (long), or on one line (wide)
+  if separated by commas.
+
+- Individual identifier may have blanks but must end with a comma.
+
+- Alleles are numbered from 01 to 99 (or 001 to 999). Consecutive
+  numbers to designate alleles are not required.
+
+- Populations are defined by the position of the "Pop" separator. To
+  group various populations, just remove relevant "Pop" separators.
+
+- Missing data should be indicated as 00 (or 000) rather than blanks.
+  There are three possibilities for missing data : no information (0000)
+  or (000000), partial information for first allele (1000) or (010000),
+  partial information for second allele (0010) or (000010).
+
+- The number of locus names should correspond to the number of genotypes
+  in each row. If you remove one or several loci from your input file,
+  you should remove both their names and the corresponding genotypes.
+
+- No empty lines should be found within the file.
+
+- No more than one empty line should be present at the end of file.
+
+**not an ideal genomic format:** The nice thing about RADseq dataset is
+that you have several important genotypes and markers metadata
+(chromosome, locus, snp, position, read depth, allele depth, etc.)
+available, these are all lacking in the genepop format. This format is
+kept for archival reasons in radiator.
+
+## Dependencies
+
+Required package dependencies are declared in `DESCRIPTION` and are
+installed with genometranslator. Any additional dependency needed only
+for this format or option is identified in this help page. Use
+[`genometranslator_dependencies()`](https://thierrygosselin.github.io/genometranslator/reference/genometranslator_dependencies.md)
+to inspect the availability of core packages, optional packages, and
+external executables.
+
+## References
+
+Raymond M. & Rousset F, (1995). GENEPOP (version 1.2): population
+genetics software for exact tests and ecumenicism. J. Heredity,
+86:248-249
+
+Rousset F. genepop'007: a complete re-implementation of the genepop
+software for Windows and Linux. Molecular Ecology Resources. 2008, 8:
+103-106. doi:10.1111/j.1471-8286.2007.01931.x
+
+## See also
+
+[genepop](https://genepop.curtin.edu.au)
+
+## Author
+
+Thierry Gosselin <thierrygosselin@icloud.com>
+
+## Examples
+
+``` r
+if (FALSE) { # \dontrun{
+# We will use the genepop dataset provided with adegenet package
+require("adegenet")
+
+# The simplest form of the function:
+nancycats.tidy <- genometranslator::read_genepop(
+    data = system.file(
+        "files/nancycats.gen",
+        package = "adegenet"
+        )
+    )
+
+# To output a data frame in wide format, with markers in separate columns:
+nancycats.wide <- genometranslator::read_genepop(
+    data = system.file(
+    "files/nancycats.gen",
+    package="adegenet"
+),
+    tidy = FALSE
+)
+} # }
+```
