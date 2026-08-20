@@ -1,0 +1,312 @@
+# separate_markers -------------------------------------------------------------
+
+# Separate a column (markers) into CHROM LOCUS and POS
+# generate markers meta
+
+#' @name separate_markers
+#' @title Separate markers column into chrom, locus and pos
+
+#' @description Genometranslator uses unique marker names by combining
+#' \code{CHROM}, \code{LOCUS}, \code{POS} columns, with double underscore
+#' separators, into \code{MARKERS = CHROM__LOCUS__POS}.
+#'
+#'
+#' Used internally in `genometranslator`
+#' and might be of interest for users who need to get back to the original metadata the
+#' function provides an easy way to do it.
+
+#' @param data An object with a column named \code{MARKERS}.
+#' If \code{CHROM}, \code{LOCUS}, \code{POS} are already present, the function
+#' returns the dataset untouched.
+#' The data can be whitelists and blacklists of markers or tidy datasets or
+#' genome GDS object.
+
+#' @param sep (optional, character) Separator used to identify the different
+#' field in the \code{MARKERS} column.
+#'
+#' When the \code{MARKERS} column doesn't have separator and the function is used
+#' to generate markers metadata column:
+#' \code{"CHROM", "LOCUS", "POS", "REF", "ALT"}, use \code{sep = NULL}.
+#' Default: \code{sep = "__"}.
+#'
+#' @param markers.meta.lists.only (logical, optional)
+#' Allows to keep only the markers metadata:
+#' \code{"VARIANT_ID", "MARKERS", "CHROM", "LOCUS", "POS"}, useful for whitelist
+#' or blacklist.
+
+#' Default: \code{markers.meta.lists.only = FALSE}.
+#' @param markers.meta.all.only (logica, optionall)
+#' Allows to keep all available markers metadata:
+#' \code{"VARIANT_ID", "MARKERS", "CHROM", "LOCUS", "POS", "COL", "REF", "ALT"},
+#' useful inside genomic translation workflows.
+
+#' Default: \code{markers.meta.all.only = FALSE}.
+#' @param generate.markers.metadata (logical, optional)
+#' Generate missing markers metadata when missing.
+#' \code{"CHROM", "LOCUS", "POS"}.
+#'
+#' Default: \code{generate.markers.metadata = TRUE}.
+#' @param generate.ref.alt (logical, optional) Generate missing REF/ALT alleles
+#' with: REF = A and ALT = C (for biallelic datasets, only).
+#' It is turned off automatically
+#' when argument \code{markers.meta.lists.only = TRUE} and
+#' on automatically when argument \code{markers.meta.all.only = TRUE}
+
+#' Default: \code{generate.ref.alt = FALSE}.
+#' @param biallelic (logical) Speed up the function execution by entering
+#' if the dataset is biallelic or not. Used internally for verification, before
+#' generating REF/ALT info.
+#' The argument is required when `generate.ref.alt = TRUE` and REF/ALT
+#' information is absent. Biallelic detection is analysis policy and is not
+#' performed automatically by this package.
+#' Default: \code{biallelic = NULL}.
+#' @inheritParams tidy_genome
+
+#' @return The same data in the global environment, with 3 new columns:
+#' \code{CHROM}, \code{LOCUS}, \code{POS}. Additionnal columns may be genrated,
+#' see arguments documentation.
+#' @rdname separate_markers
+
+#' @examples
+#' \dontrun{
+#' whitelist <- genometranslator::separate_markers(data = whitelist.markers)
+#' tidy.data <- genometranslator::separate_markers(data = bluefintuna.data)
+#' }
+#' @export
+
+#' @seealso \code{\link{generate_markers_metadata}}
+
+#' @author Thierry Gosselin \email{thierrygosselin@@icloud.com}
+
+separate_markers <- function(
+    data,
+    sep = "__",
+    markers.meta.lists.only = FALSE,
+    markers.meta.all.only = FALSE,
+    generate.markers.metadata = TRUE,
+    generate.ref.alt = FALSE,
+    biallelic = NULL,
+    parallel.core = parallel::detectCores() - 1,
+    verbose = TRUE
+) {
+  # data.bk <- data
+  # sep <- "__"
+  # generate.ref.alt <- TRUE
+  # biallelic= TRUE
+
+
+
+  # check if markers column is present
+  if (!tibble::has_name(data, "MARKERS")) {
+    rlang::abort("The data require a column named MARKERS")
+  }
+
+  n.markers <- length(unique(data$MARKERS))
+  unique.markers <- nrow(data) == n.markers
+
+  if (unique.markers && generate.ref.alt && is.null(biallelic)) {
+    rlang::abort("biallelic TRUE/FALSE required")
+  }
+
+  if (markers.meta.lists.only) {
+    want <- c("VARIANT_ID", "MARKERS", "CHROM", "LOCUS", "POS")
+    data %<>%
+      dplyr::select(tidyselect::any_of(want)) %>%
+      dplyr::distinct(MARKERS, .keep_all = TRUE)
+    generate.ref.alt <- FALSE
+    generate.markers.metadata <- FALSE
+  }
+
+  if (markers.meta.all.only) {
+    notwanted <- c("ALT_DOSAGE", "GT", "GT_VCF", "GT_VCF_NUC", "DP", "AD", "GL",
+                   "PL", "GQ", "HQ", "GOF", "NR", "NV", "CATG")
+    data %<>%
+      dplyr::select(-tidyselect::any_of(notwanted)) %>%
+      dplyr::distinct(MARKERS, .keep_all = TRUE)
+    generate.markers.metadata <- generate.ref.alt <- TRUE
+  }
+
+  if (!is.null(sep)) {
+    rad.sep <- unique(
+      stringi::stri_detect_fixed(
+        str = sample(x = unique(data$MARKERS), size = min(200, length(data$MARKERS))),
+        pattern = sep))
+
+    if (length(rad.sep) != 1) rlang::abort("More than 1 separator was detected")
+    if (!rad.sep) {
+      message("The separator specified is not valid")
+    } else {
+      if (FALSE %in% unique(c("CHROM", "LOCUS", "POS") %in% colnames(data))) {
+        rad.sep <- TRUE
+      } else {
+        rad.sep <- FALSE
+      }
+
+      if (rad.sep) {
+        # Note to myself: this section could be parallelized when whole dataset are required
+        want <- c("CHROM", "LOCUS", "POS")
+
+        if (unique.markers) {
+          data %<>%
+            dplyr::select(-tidyselect::any_of(want)) %>%
+            tidyr::separate(data = ., col = "MARKERS", into = want, sep = sep, remove = FALSE)
+        } else {# for datasets
+          temp <- tidyr::separate(
+            data = dplyr::distinct(data, MARKERS),
+            col = "MARKERS",
+            into = want,
+            sep = sep,
+            remove = FALSE)
+
+          data %<>%
+            dplyr::select(-tidyselect::any_of(want)) %>%
+            dplyr::left_join(temp, by = intersect(colnames(data), colnames(temp)))
+          temp <- NULL
+        }
+      }
+    }
+  }# End of splitting markers column
+
+  # Generate missing markers meta
+  if (generate.markers.metadata) {
+    data <- generate_markers_metadata(
+      data = data,
+      generate.markers.metadata = generate.markers.metadata,
+      generate.ref.alt = generate.ref.alt,
+      biallelic = biallelic,
+      parallel.core = parallel.core, verbose = verbose)
+  }
+  return(data)
+}#End separate_markers
+
+# generate_markers_metadata ----------------------------------------------------
+#' @name generate_markers_metadata
+#' @title Generate markers metadata
+
+#' @description Generate markers metadata: \code{CHROM, LOCUS, POS, REF, ALT}
+#' when missing from tidy datasets.
+
+#' @inheritParams separate_markers
+#' @inheritParams tidy_genome
+
+#' @return Depending on argument's value, the same data is returned
+#' in the global environment, with potential these additional columns:
+#' \code{CHROM, LOCUS, POS, REF, ALT}.
+#' @rdname generate_markers_metadata
+
+#' @examples
+#' \dontrun{
+#' tidy.data <- genometranslator::generate_markers_metadata(data = bluefintuna.data)
+#' }
+#' @param biallelic (logical) Speed up the function execution by entering
+#' if the dataset is biallelic or not. Used internally for verification, before
+#' generating REF/ALT info.
+#' The argument is required when \code{generate.ref.alt = TRUE} and REF/ALT
+#' information is absent. Biallelic detection is analysis policy and is not
+#' performed automatically by this package.
+#' Default: \code{biallelic = NULL}.
+#' 
+#' @param generate.ref.alt (logical, optional) Generate missing REF/ALT alleles
+#' with: REF = A and ALT = C (for biallelic datasets, only).
+#' It is turned off automatically
+#' when argument \code{markers.meta.lists.only = TRUE} and
+#' on automatically when argument \code{markers.meta.all.only = TRUE}
+#' Default: \code{generate.ref.alt = FALSE}.
+#' 
+#' @param generate.markers.metadata (logical, optional)
+#' Generate missing markers metadata when missing.
+#' \code{"CHROM", "LOCUS", "POS"}.
+#' Default: \code{generate.markers.metadata = TRUE}.
+#' 
+#' @export
+#' @keywords internal
+#' @seealso \code{\link{separate_markers}}
+
+
+#' @author Thierry Gosselin \email{thierrygosselin@@icloud.com}
+generate_markers_metadata <- function(
+    data,
+    generate.markers.metadata = TRUE,
+    generate.ref.alt = FALSE,
+    biallelic = NULL,
+    parallel.core = parallel::detectCores() - 1,
+    verbose = TRUE
+) {
+  if (!generate.markers.metadata && generate.ref.alt) {
+    if (verbose) message("generate.markers.metadata: switched to TRUE automatically")
+    generate.markers.metadata <- TRUE
+  }
+
+  if (generate.markers.metadata) {
+    n.markers <- length(unique(data$MARKERS))
+
+    unique.markers <- nrow(data) == n.markers
+
+
+    if (unique.markers && generate.ref.alt && is.null(biallelic)) {
+      rlang::abort("biallelic TRUE/FALSE required")
+    }
+
+    want <- c("FILTERS", "VARIANT_ID", "MARKERS", "CHROM", "LOCUS", "POS", "COL", "REF",
+              "ALT", "CALL_RATE", "AVG_COUNT_REF", "AVG_COUNT_SNP", "REP_AVG",
+              "ONE_RATIO_REF", "ONE_RATIO_SNP", "SEQUENCE")
+    notwanted <- c("ALT_DOSAGE", "GT", "GT_VCF", "GT_VCF_NUC", "DP", "AD", "GL",
+                   "PL", "GQ", "HQ", "GOF", "NR", "NV", "CATG")
+    if (!unique.markers) {
+      markers.meta <- data %>%
+        dplyr::select(-tidyselect::any_of(notwanted)) %>%
+        dplyr::distinct(MARKERS, .keep_all = TRUE)
+    } else {
+      markers.meta <- dplyr::select(data, -tidyselect::any_of(notwanted))
+      data <- NULL
+    }
+
+    if (!rlang::has_name(markers.meta, "VARIANT_ID")) {#nrow(markers.meta) == n.markers
+      markers.meta %<>% dplyr::mutate(VARIANT_ID = as.integer(factor(MARKERS)))
+    }
+
+    if (!tibble::has_name(markers.meta, "CHROM")) {
+      markers.meta %<>% dplyr::mutate(CHROM = rep("CHROM_1", n.markers))
+      if (verbose) message("CHROM info missing: 'CHROM_1' integer was added to dataset")
+    }
+
+    # Generate LOCUS info if not present
+    if (!tibble::has_name(markers.meta, "LOCUS")) {
+      markers.meta %<>% dplyr::mutate(LOCUS = seq(1, n.markers, by = 1))
+      if (verbose) message("LOCUS info missing: unique integers were added to dataset")
+    }
+
+    if (!tibble::has_name(markers.meta, "POS")) {
+      # markers.meta %<>% dplyr::mutate(CHROM = rep(1L, n.markers)) # error 20240125?
+      markers.meta %<>% dplyr::mutate(POS = MARKERS)
+      if (verbose) message("POS info missing: dataset filled with MARKERS column")
+    }
+
+    # Generate REF/ALT allele if not in dataset
+    if (generate.ref.alt) {
+      if (tibble::has_name(markers.meta, "REF")) generate.ref.alt <- FALSE
+      if (is.null(biallelic)) {
+        rlang::abort(
+          "`biallelic` must be supplied when generating missing REF/ALT metadata."
+        )
+      }
+      if (!biallelic) generate.ref.alt <- FALSE
+    }
+
+    if (generate.ref.alt) {
+      markers.meta %<>% dplyr::mutate(REF = "A", ALT = "C")
+      if (verbose) message("REF and ALT allele info missing: setting REF = A and ALT = C")
+    }
+
+    if (!unique.markers) {
+      data %<>% dplyr::left_join(markers.meta, by = intersect(colnames(data),
+                                                              colnames(markers.meta)))
+    } else {
+      data <- markers.meta
+    }
+    markers.meta <- NULL
+  }
+  return(data)
+}#End generate_markers_metadata
+
+

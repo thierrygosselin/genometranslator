@@ -1,11 +1,67 @@
 Package: genometranslator
-Title: What the Package Does (One Line, Title Case)
+Type: Package
+Title: Read, Standardize and Translate Genomic Data
 Version: 0.0.0.9000
-Authors@R: 
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"))
-Description: What the package does (one paragraph).
-License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a
-    license
+Date: 2026-08-16
+Authors@R: person(
+    given = "Thierry",
+    family = "Gosselin",
+    email = "thierrygosselin@icloud.com",
+    role = c("aut", "cre")
+  )
+Description: Reads, standardizes, validates, and translates individual genomic
+    data among commonly used file formats and R data structures. A consistent
+    representation of genotypes and their associated sample and marker metadata
+    supports reliable exchange among genomic data workflows.
+License: GPL-3
+URL: https://thierrygosselin.github.io/genometranslator/,
+    https://github.com/thierrygosselin/genometranslator
+BugReports: https://github.com/thierrygosselin/genometranslator/issues
+Remotes:
+    thierrygosselin/tgbase,
+    EricArcher/strataG
+Maintainer: Thierry Gosselin <thierrygosselin@icloud.com>
+Depends:
+    R (>= 4.4)
+Imports:
+    arrow,
+    carrier,
+    cli,
+    data.table,
+    dplyr (>= 1.2.1),
+    gdsfmt,
+    magrittr,
+    matrixStats,
+    methods,
+    parallel,
+    purrr,
+    readr (>= 2.1.0),
+    rlang,
+    Rsamtools,
+    SeqArray (>= 1.52.1),
+    stats,
+    stringi,
+    sys,
+    tgbase,
+    tibble,
+    tidyr (>= 1.3.2),
+    tidyselect,
+    tools,
+    utils,
+    vctrs,
+    vroom,
+    withr
+Suggests:
+    adegenet,
+    fst (>= 0.9.8),
+    knitr,
+    rmarkdown,
+    SNPRelate,
+    strataG
+VignetteBuilder: knitr
 Encoding: UTF-8
+Language: en-US
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 8.1.0
+LazyLoad: yes
+ByteCompile: TRUE
+Config/roxygen2/version: 8.1.0

@@ -1,0 +1,189 @@
+# write a faststructure file from a tidy data frame
+
+#' @name write_faststructure
+#' @title Write a faststructure file from a tidy data frame
+#' @section Dependencies:
+#' Required package dependencies are declared in DESCRIPTION and installed
+#' with genometranslator. Run `genometranslator_dependencies()` to inspect
+#' core packages, optional packages, and external executables.
+#'
+#' The standard text output has no additional R-package dependency. Setting
+#' \code{plink.bed = TRUE} requires the optional Bioconductor package
+#' \href{https://bioconductor.org/packages/SNPRelate}{\pkg{SNPRelate}}.
+#' This writer prepares input files; it does not install or run fastStructure.
+#' @description Write a faststructure file from a tidy data frame.
+#' For biallelic dataset only.
+#' Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
+#' and \href{https://github.com/thierrygosselin/assigner}{assigner}
+#' and might be of interest for users.
+#' Prepare quality-controlled biallelic markers and consider missingness,
+#' minor-allele frequency, and linkage disequilibrium before export.
+
+#' @inheritParams genometranslator_common_arguments
+
+#' @param plink.bed To export in plink BED format. This will write 3 files:
+#' \code{.bed}, \code{.bim}, \code{.fam}. For this option to work, the argument
+#' data must be a GDS file or object.
+#' Default: \code{plink.bed = FALSE}.
+
+#' @inheritParams read_strata
+
+#' @param filename (optional) The file name prefix for the faststructure file
+#' written to the working directory. With default: \code{filename = NULL},
+#' the date and time is appended to \code{radiator_faststructure_}.
+
+#' Default: \code{filename = NULL}.
+#' @param ... other parameters passed to the function.
+
+#' @return A faststructure file is saved to the working directory.
+
+#' @export
+#' @rdname write_faststructure
+
+#' @references Raj A, Stephens M, Pritchard JK (2014)
+#' fastSTRUCTURE: Variational Inference of Population Structure in Large SNP
+#' Datasets. Genetics, 197, 573-589.
+
+
+#' @author Thierry Gosselin \email{thierrygosselin@@icloud.com}
+#' @template writer-filtering
+
+write_faststructure <- function(
+  data,
+  plink.bed = FALSE,
+  pop.levels = NULL,
+  filename = NULL,
+  ...
+) {
+
+  # Checking for missing and/or default arguments ******************************
+  if (missing(data)) rlang::abort("Input file missing")
+
+  if (plink.bed) {
+    # Required packages
+    if (!requireNamespace("SNPRelate", quietly = TRUE)) {
+      rlang::abort('To install SNPRelate:\n
+                   install.packages("BiocManager")
+                   BiocManager::install("SNPRelate")
+                   ')
+    }
+
+
+    # File type detection----------------------------------------------------------
+    data.type <- genometranslator::detect_genomic_format(data)
+    # Import data ---------------------------------------------------------------
+
+    if (data.type %in% c("SeqVarGDSClass", "gds.file")) {
+      if (data.type == "gds.file") data %<>% genometranslator::read_genome(data = .)
+    } else {
+      rlang::abort("plink.bed option requires GDS file or object")
+    }
+
+    SeqArray::seqGDS2SNP(gdsfile = data, out.gdsfn = "radiator.temp", verbose = TRUE)
+    temp <- SNPRelate::snpgdsOpen(
+      filename = "radiator.temp",
+      readonly = TRUE,
+      allow.duplicate = TRUE,
+      allow.fork = TRUE
+      )
+    SNPRelate::snpgdsGDS2BED(gdsobj = temp, bed.fn = filename, verbose = TRUE)
+    # Converting from GDS to PLINK binary PED:
+    #   Working space: 208 samples, 8719 SNPs
+    # Error in if ((opt$autosome.start == 1) & (opt$autosome.end == 22)) { :
+    #     missing value where TRUE/FALSE needed
+    file.remove(temp$filename)
+  } else {
+    # Import data ---------------------------------------------------------------
+    if (is.vector(data)) data %<>% genometranslator::read_genome(data = .)
+
+    want <- c("INDIVIDUALS", "POP_ID", "MARKERS", "GT", "ALT_DOSAGE")
+    data %<>% dplyr::select(tidyselect::any_of(want))
+
+    # pop.levels -----------------------------------------------------------------
+    if (!is.null(pop.levels)) {
+      data %<>%
+        dplyr::mutate(
+          POP_ID = factor(POP_ID, levels = pop.levels, ordered = TRUE),
+          POP_ID = droplevels(POP_ID)
+        ) %>%
+        dplyr::arrange(POP_ID, INDIVIDUALS, MARKERS)
+    } else {
+      data %<>%
+        dplyr::mutate(POP_ID = factor(POP_ID)) %>%
+        dplyr::arrange(POP_ID, INDIVIDUALS, MARKERS)
+    }
+
+    # Create a marker vector  ------------------------------------------------
+    # markers <- dplyr::distinct(.data = data, MARKERS) %>%
+    #   dplyr::arrange(MARKERS) %>%
+    #   purrr::flatten_chr(.)
+
+    # faststructure format ----------------------------------------------------------------
+    if (rlang::has_name(data, "ALT_DOSAGE")) {
+      want <- c("INDIVIDUALS", "POP_ID", "MARKERS", "ALT_DOSAGE")
+        data %<>%
+          dplyr::select(tidyselect::any_of(want)) %>%
+          dplyr::mutate(
+            A1 = dplyr::case_when(
+              ALT_DOSAGE == 0 ~ 1L,
+              ALT_DOSAGE == 1 ~ 1L,
+              ALT_DOSAGE == 2 ~ 2L,
+              is.na(ALT_DOSAGE) ~ -9L
+            ),
+            A2 = dplyr::case_when(
+              ALT_DOSAGE == 0 ~ 1L,
+              ALT_DOSAGE == 1 ~ 2L,
+              ALT_DOSAGE == 2 ~ 2L,
+              is.na(ALT_DOSAGE) ~ -9L
+            ),
+            ALT_DOSAGE = NULL
+          ) %>%
+          tgbase::trans_long(x = ., cols = c("POP_ID", "INDIVIDUALS", "MARKERS"), names_to = "ALLELES", values_to = "GT")
+    } else {
+      want <- c("INDIVIDUALS", "POP_ID", "MARKERS", "GT")
+        data %<>%
+          dplyr::select(tidyselect::any_of(want)) %>%
+          dplyr::mutate(
+            A1 = stringi::stri_sub(str = GT, from = 1, to = 3),
+            A2 = stringi::stri_sub(str = GT, from = 4, to = 6),
+            GT = NULL
+          ) %>%
+          tgbase::trans_long(x = ., cols = c("POP_ID", "INDIVIDUALS", "MARKERS"), names_to = "ALLELES", values_to = "GT") %>%
+          dplyr::mutate(
+            GT = stringi::stri_replace_all_fixed(str = GT, pattern = "000", replacement = "-9", vectorize_all = FALSE),
+            GT = as.integer(GT)
+          )
+    }
+
+    # common to both GT and ALT_DOSAGE
+    data  %<>%
+      tgbase::trans_wide(x = ., formula = "INDIVIDUALS + POP_ID ~ MARKERS + ALLELES", values_from = "GT") %>%
+      dplyr::mutate(POP_ID = as.integer(POP_ID))
+
+    markers.col <- purrr::keep(
+      .x = colnames(data),
+      .p = !colnames(data) %in% c("POP_ID", "INDIVIDUALS")
+    )
+
+    data %<>%
+      dplyr::mutate(C3 = 1L, C4 = 1L, C5 = 1L, C6 = 1L) %>%
+      dplyr::select(INDIVIDUALS, POP_ID, C3, C4, C5, C6, tidyselect::everything(markers.col)) %>%
+      dplyr::arrange(POP_ID, INDIVIDUALS)
+
+    # Write the file in faststructure format -----------------------------------------
+    # Filename
+    if (is.null(filename)) {
+      file.date <- format(Sys.time(), "%Y%m%d@%H%M")
+      filename <- stringi::stri_join("radiator_", file.date, ".faststructure.str")
+    } else {
+      filename <- stringi::stri_join(filename, ".faststructure.str")
+    }
+
+    # filename.connection <- file(filename, "w") # open the connection to the file
+    # writeLines(text = stringi::stri_join(markers, sep = "\t", collapse = "\t"),
+    #            con = filename.connection, sep = "\n")
+    # close(filename.connection) # close the connection
+    readr::write_tsv(x = data, file = filename, append = FALSE, col_names = FALSE)
+  }
+  return(filename)
+} # end write_faststructure

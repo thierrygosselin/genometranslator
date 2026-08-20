@@ -1,0 +1,824 @@
+# read_strata ----------------------------------------------------------------------------------
+#' @name read_strata
+#' @title read strata
+#' @description Read a strata object or file. The strata file contains thes
+#' individual's metadata, the stratification: e.g. the population id and/or
+#' the sampling sites (see details).
+#' Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
+#' and might be of interest for users.
+
+#' @param strata (path or object) The strata file or object.
+#' Additional documentation is available in \code{\link{read_strata}}.
+#' Use that function to whitelist/blacklist populations/individuals.
+#' Option to set \code{pop.levels/pop.labels} is also available.
+
+#' @param pop.id (logical) When \code{pop.id = TRUE}, the strata returns
+#' the stratification colname \code{POP_ID}.
+#' With the default, Returns \code{STRATA}.
+
+#' Default: \code{pop.id = FALSE}.
+#' @param pop.levels (optional, string) This refers to the levels in a factor. In this
+#' case, the id of the pop.
+#' Use this argument to have the pop ordered your way instead of the default
+#' alphabetical or numerical order. e.g. \code{pop.levels = c("QUE", "ONT", "ALB")}
+#' instead of the default \code{pop.levels = c("ALB", "ONT", "QUE")}.
+#' White spaces in population names are replaced by underscore.
+#' Default: \code{pop.levels = NULL}.
+
+
+#' @param pop.labels (optional, string) Use this argument to rename/relabel
+#' your pop or combine your pop. e.g. To combine \code{"QUE"} and \code{"ONT"}
+#' into a new pop called \code{"NEW"}:
+#' (1) First, define the levels for your pop with \code{pop.levels} argument:
+#' \code{pop.levels = c("QUE", "ONT", "ALB")}.
+#' (2) then, use \code{pop.labels} argument:
+#' \code{pop.labels = c("NEW", "NEW", "ALB")}.
+#' To rename \code{"QUE"} to \code{"TAS"}:
+#' \code{pop.labels = c("TAS", "ONT", "ALB")}.
+#' Default: \code{pop.labels = NULL}.
+#' White spaces in population names are replaced by underscore.
+
+
+#' @param pop.select (optional, string) Selected list of populations for
+#' the analysis. e.g. \code{pop.select = c("QUE", "ONT")} to select \code{QUE}
+#' and \code{ONT} population samples (out of 20 pops). If \code{pop.labels}
+#' argument was used to rename the strata column, use the new names with
+#' \code{pop.select}.
+#' Default: \code{pop.select = NULL}.
+#' @inheritParams tidy_genome
+#' @inheritParams read_blacklist_id
+
+#' @param keep.two (optional, logical) The output is limited to 2 columns:
+#' \code{INDIVIDUALS, STRATA}. By default all the samples metadata is imported.
+#' Default: \code{keep.two = FALSE}.
+
+#' @param path.folder (optional, path)
+#' If \code{!is.null(blacklist.id) || !is.null(pop.select)}, the modified strata
+#' is written by default in the working directory.
+#' Default: \code{path.folder = getwd()}.
+
+#' @param filename (optional, character) If \code{!is.null(blacklist.id) ||
+#' !is.null(pop.select)}, the modified strata is written by default in the
+#' working directory with date and time appended to \code{strata_radiator_filtered},
+#' to make the file unique. If you plan on writing more than 1 strata file per minute,
+#' use this argument to supply the unique filename. When filename is not NULL, it
+#' will also trigger saving the strata to a file.
+#' Default: \code{filename = NULL}.
+
+
+#' @details The strata file used in radiator is a tab delimited file with
+#' a minimum of 2 columns headers (3 for DArT data users):
+#' \code{INDIVIDUALS} and \code{STRATA}.
+#' If a \code{strata} file is specified with all file formats that don't
+#' require it, the strata argument will have precedence on the population
+#' groupings used internally in those file formats. For file formats without
+#' population/strata groupings (e.g. vcf, haplotype files) if no strata file is
+#' provided, 1 pop/strata grouping will automatically be created.
+#' For vcf and haplotypes file, the strata can also be used as a whitelist of id.
+#' Samples not in the strata file will be discarded from the data set.
+#' The \code{STRATA} column can be any hierarchical grouping.
+#' To create a strata file see \code{\link{individuals2strata}}.
+#' If you have already run
+#' \href{http://catchenlab.life.illinois.edu/stacks/}{stacks} on your data,
+#' the strata file is similar to a stacks \emph{population map file},
+#' make sure you
+#' have the required column names (\code{INDIVIDUALS} and \code{STRATA}).
+#' The strata column is cleaned of a white spaces that interfere with some
+#' packages or codes: space is changed to an underscore \code{_}.
+#'
+#' For DArT data see \code{\link{read_dart}}
+#'
+#' \href{https://www.dropbox.com/s/g0vsek0dmtpxntt/example.strata.tsv?dl=0}{example.strata.tsv}.
+#'
+#' \href{https://www.dropbox.com/s/utq2h6o00v55kep/example.dart.strata.tsv?dl=0}{example.dart.strata.tsv}.
+
+
+#' @section VCF:
+#' VCF file users, not sure about the sample id inside your file ?
+#' See the example in \code{\link{extract_individuals_vcf}}
+
+#' @section DArT:
+#' DArT file users, not sure about the sample id inside your file ?
+#' See the example in \code{\link{extract_dart_target_id}}
+
+#' @seealso \code{\link{summary_strata}},
+#' \code{\link{individuals2strata}}, \code{\link{change_pop_names}},
+#' \code{\link{join_strata}}, \code{\link{generate_strata}}
+
+#' @rdname read_strata
+#' @param verbose Logical indicating whether progress messages are emitted.
+#' Default: \code{verbose = FALSE}.
+#'
+#' @export
+#' @return \strong{A list} with several components:
+#' \enumerate{
+#' \item $strata
+#' \item $pop.levels
+#' \item $pop.labels
+#' \item $pop.select
+#' \item $blacklist.id
+#' }
+#' @examples
+#' \dontrun{
+#' strata.info <- genometranslator::read_strata(strata)
+#'
+#' # the return object is a list with 5 objects:
+#' names(strata.info)
+#'
+#' # to get the strata
+#' new.strata <- strata.info$strata
+#'
+#' # if naything is changed from the original strata, a new strata file is
+#' # generated automatically:
+#'
+#' new.strata <- genometranslator::read_strata(
+#'     strata = strata,
+#'     blacklist.id = "blacklisted.ids.tsv"
+#'     )
+#'
+#' }
+#' @template io-dependencies
+
+read_strata <- function(
+    strata,
+    pop.id = FALSE,
+    pop.levels = NULL,
+    pop.labels = NULL,
+    pop.select = NULL,
+    blacklist.id = NULL,
+    keep.two = FALSE,
+    path.folder = getwd(),
+    filename = NULL,
+    verbose = FALSE
+) {
+  # Common startup -------------------------------------------------------------
+  .start <- tgbase::startup(
+    package = "genometranslator",
+    f.name = "read_strata",
+    verbose = verbose
+  )
+  on.exit(tgbase::teardown(.start), add = TRUE)
+
+  if (missing(strata)) rlang::abort("\nMissing strata argument...\n")
+  # file.date <- format(Sys.time(), "%Y%m%d@%H%M")
+
+  # required for some radiator function when strata is not there
+  if (is.null(strata)) return(NULL)
+
+  if (!is.null(strata)) {
+    if (verbose) message("Reading strata")
+
+    if (is.vector(strata)) {
+      if (!file.exists(strata)) rlang::abort("strata file doesn't exist.")
+      # now using vroom because its faster
+      strata <- vroom::vroom(
+        file = strata,
+        col_types = vroom::cols(.default = "c"),
+        show_col_types = FALSE
+      )
+    }
+
+    if (rlang::has_name(strata, "POP_ID") && !rlang::has_name(strata, "STRATA")) {
+      colnames(strata) <- stringi::stri_replace_all_fixed(
+        colnames(strata), "POP_ID", "STRATA",
+        vectorize_all = FALSE)
+    }
+
+    # necessary for some analysis
+    # When no need for additionnal individuals metadata info
+    # TARGET_ID is removed if present
+    if (keep.two) strata  %<>% dplyr::select(INDIVIDUALS, STRATA)
+
+    # clean....
+    strata$INDIVIDUALS <- clean_ind_names(strata$INDIVIDUALS)
+    strata$STRATA <- clean_pop_names(x = strata$STRATA, factor = FALSE)
+
+    # unique(strata$STRATA)
+    # length(unique(strata$STRATA))
+
+    # manage levels, labels and pop.select ---------------------------------------
+    check <- check_pop_levels(
+      pop.levels = pop.levels,
+      pop.labels = pop.labels,
+      pop.select = pop.select
+    )
+
+    pop.levels <- check$pop.levels
+    pop.labels <- check$pop.labels
+    pop.select <- check$pop.select
+
+
+    # POP LABELS changing strata names -----------------------------------------
+    if (!is.null(pop.labels)) {
+      strata %<>%
+        dplyr::left_join(
+          tibble::tibble(STRATA = pop.levels, LABELS = pop.labels),
+          by = "STRATA"
+        ) %>%
+        dplyr::mutate(
+          STRATA = LABELS,
+          LABELS = NULL,
+          STRATA = factor(STRATA, levels = unique(pop.labels))
+        )
+      pop.labels <- pop.levels <- unique(pop.labels)
+
+    } else {
+      if (is.null(pop.levels)) { # no pop.levels
+        strata$STRATA <- factor(strata$STRATA)
+        pop.levels <- unique(strata$STRATA)
+      } else {# with pop.levels
+        n.pop <- unique(strata$STRATA)
+        if (length(n.pop) != length(pop.levels)) {
+          cli::cli_alert_info("pop.levels and unique STRATA have different length")
+          cli::cli_alert_info("unique STRATA names will replace pop.levels")
+          pop.levels <- unique(strata$STRATA)
+        }
+        strata$STRATA <- factor(
+          x = strata$STRATA,
+          levels = pop.levels,
+          ordered = FALSE)
+      }
+    }
+
+    #blacklist.id ----------------------------------------------------------------
+    blacklist.id <- read_blacklist_id(blacklist.id, verbose)
+    if (!is.null(blacklist.id)) {
+      strata  %<>% dplyr::filter(!INDIVIDUALS %in% blacklist.id$INDIVIDUALS)
+    }
+
+
+    if (!is.null(pop.select)) {
+      n.pop.new <- length(pop.select)
+      strata  %<>% dplyr::filter(STRATA %in% pop.select)
+      strata$STRATA <- droplevels(strata$STRATA)
+    }
+
+    if (!is.null(pop.select) || !is.null(blacklist.id)) {
+      pop.levels <- levels(strata$STRATA)
+      if (!is.null(pop.labels)) pop.labels <- pop.levels
+    }
+
+    # DArT TARGET_ID
+    if (rlang::has_name(strata, "TARGET_ID")) {
+      strata  %<>%
+        dplyr::mutate(
+          TARGET_ID = stringi::stri_trans_toupper(TARGET_ID),
+          TARGET_ID = clean_ind_names(TARGET_ID))
+    }
+
+    strata  %<>% dplyr::arrange(STRATA, INDIVIDUALS)
+
+    if (verbose) message("Number of strata: ", length(unique(strata$STRATA)))
+    if (verbose) message("Number of individuals: ", length(unique(strata$INDIVIDUALS)))
+
+    # POP_ID is still currently used but will be deprecated soon
+    # so I keep it for now
+    if (isTRUE(pop.id)) strata %<>% dplyr::rename(POP_ID = STRATA)
+
+    if (!is.null(pop.select)) {
+      if (verbose) message("Strata selected: ", stringi::stri_join(pop.select, collapse = ", "), " (", n.pop.new," strata)")
+    }
+
+    write.strata <- FALSE
+    # if the strata is modified by blacklisting samples, we write a new one...
+    if (!is.null(blacklist.id) || !is.null(pop.select)) {
+      write.strata <- TRUE
+    }
+
+    if (!is.null(filename)) {
+      write.strata <- TRUE
+    } else {
+      filename <- "strata_radiator_filtered"
+    }
+
+    if (write.strata) {
+      tgbase::write_tgbase_tsv(
+        data = strata,
+        path.folder = path.folder,
+        filename = filename,
+        date = TRUE,
+        internal = FALSE,
+        write.message = "standard",
+        verbose = TRUE
+      )
+    }
+
+
+    res = list(
+      strata = strata,
+      pop.levels = pop.levels,
+      pop.labels = pop.labels,
+      pop.select = pop.select,
+      blacklist.id = blacklist.id)
+  }
+  return(res)
+}#End read_strata
+
+# Summary strata ---------------------------------------------------------------
+#' @title Summary of strata
+#' @description Summarise the information of a strata file or object.
+#' Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
+#' and might be of interest for users.
+#' @param strata (path or object) The strata file or object.
+#' @seealso \code{\link{read_strata}},
+#' \code{\link{individuals2strata}}, \code{\link{change_pop_names}},
+#' \code{\link{join_strata}}, \code{\link{generate_strata}}
+#' @rdname summary_strata
+#' @export
+#' @return
+#' \enumerate{
+#' \item Number of strata/populations
+#' \item Number of individuals
+#' \item Number of individuals per populations
+#' \item Number of duplicate ids.
+#' }
+#' @examples
+#' \dontrun{
+#' genometranslator::summary_strata(strata)
+#' }
+summary_strata <- function(strata) {
+
+  strata <- genometranslator::read_strata(strata = strata)$strata
+
+  strata.stats <- strata %>%
+    dplyr::group_by(STRATA) %>%
+    dplyr::tally(.) %>%
+    dplyr::mutate(POP_IND = stringi::stri_join(STRATA, n, sep = " = "))
+
+  duplicate.id <- nrow(strata) - length(unique(strata$INDIVIDUALS))
+  # here we just want to know if duplicated ids exist
+  # not the time or place to list and print...
+
+  message("Number of strata: ", length(unique(strata$STRATA)))
+  message("Number of individuals: ", length(unique(strata$INDIVIDUALS)))
+  message("\nNumber of ind/strata:\n", stringi::stri_join(strata.stats$POP_IND, collapse = "\n"))
+  message("\nNumber of duplicate id: ", duplicate.id)
+}#End summary_strata
+
+
+# individuals2strata------------------------------------------------------------
+# Make strata file from individuals
+
+#' @name individuals2strata
+#' @title Create a strata file from a list of individuals
+#' @description If your individuals have a consistent naming scheme
+#' (e.g. SPECIES-POPULATION-MATURITY-YEAR-ID = CHI-QUE-ADU-2014-020),
+#' use this function to rapidly create a strata file.
+#' Several functions in \pkg{genometranslator} and \pkg{assigner} requires
+#' a \code{strata} argument, i.e. a data frame with the individuals and
+#' associated groupings. If you have already run
+#' \href{http://catchenlab.life.illinois.edu/stacks/}{stacks} on your data,
+#' the strata file is similar to a stacks `population map file`, make sure you
+#' have the required column names  (\code{INDIVIDUALS} and \code{STRATA}).
+
+#' @param data A file or data frame object with individuals in a column. The
+#' column name is \code{INDIVIDUALS}.
+
+#' @param strata.start (integer) The start of your strata id. See details for more info.
+
+#' @param strata.end (integer) The end of your strata id. See details for more info.
+
+#' @param filename (optional) The file name for the strata object if you
+#' want to save it in the working directory.
+#' With the default, The starta object is in the global
+#' environment only (i.e. not written in the working directory).
+
+#' Default: \code{filename = NULL}.
+#' @seealso \code{\link{read_strata}}, \code{\link{summary_strata}},
+#' \code{\link{change_pop_names}},
+#' \code{\link{join_strata}}, \code{\link{generate_strata}}
+
+#' @return a strata object and file, if requested. The file is tab delimited
+#' with 2 columns named:
+#' \code{INDIVIDUALS} and \code{STRATA}.
+#' The \code{STRATA} column can be any hierarchical grouping.
+
+
+#' @details
+#' \code{strata.start} and \code{strata.end}
+#' The info must be found within the name of your individual sample. If not,
+#' you'll have to create a strata file by hand, the old fashion way.
+#' e.g. if your individuals are identified
+#' in this form : SPECIES-POPULATION-MATURITY-YEAR-ID = CHI-QUE-ADU-2014-020,
+#' then, to have the population id in the \code{STRATA} column,
+#' \code{strata.start = 5} and \code{strata.end = 7}.
+#' The \code{STRATA} column can be any hierarchical grouping.
+
+#' @export
+#' @rdname individuals2strata
+
+
+#' @examples
+#' \dontrun{
+#' strata.abalone <- individuals2strata(
+#' data = "individuals.abalone.tsv",
+#' strata.start = 5,
+#' strata.end = 7,
+#' filename = "strata.abalone.tsv"
+#' )
+#' }
+
+#' @author Thierry Gosselin \email{thierrygosselin@@icloud.com}
+
+individuals2strata <- function(
+    data,
+    strata.start,
+    strata.end,
+    filename = NULL
+) {
+
+
+  # Checking for missing and/or default arguments ******************************
+  if (missing(data)) rlang::abort("Input file missing")
+  if (missing(strata.start)) rlang::abort("strata.start argument missing")
+  if (missing(strata.end)) rlang::abort("strata.end argument missing")
+  if (is.vector(data)) data <- readr::read_tsv(file = data)
+
+  data <- tibble::as_tibble(data) %>%
+    dplyr::mutate(
+      INDIVIDUALS =  as.character(INDIVIDUALS),
+      STRATA = stringi::stri_sub(str = INDIVIDUALS, from = strata.start, to = strata.end)
+    )
+
+
+  # Write to working directory
+  if (!is.null(filename)) {
+    message("Writing the strata object to the working directory: \n", filename)
+    readr::write_tsv(x = data, file = filename, col_names = TRUE)
+  }
+
+  return(data)
+} # end individuals2strata
+
+
+
+
+# change_pop_names--------------------------------------------------------------
+
+#' @name change_pop_names
+#' @title Transform into a factor the STRATA column, change names and reorder the levels
+#' @description Transform into a factor the STRATA column, change names and
+#' reorder the levels.
+
+#' @inheritParams tidy_genome
+#' @inheritParams read_strata
+#' @seealso \code{\link{read_strata}}, \code{\link{summary_strata}},
+#' \code{\link{individuals2strata}},
+#' \code{\link{join_strata}}, \code{\link{generate_strata}}
+
+#' @rdname change_pop_names
+#' @export
+#'
+#' @author Thierry Gosselin \email{thierrygosselin@@icloud.com}
+
+
+change_pop_names <- function(data, pop.levels = NULL, pop.labels = NULL) {
+
+  # checks ---------------------------------------------------------------------
+  if (missing(data)) rlang::abort("Input file missing")
+
+  # STRATA in gsi_sim does not like spaces, we need to remove space in everything touching STRATA...
+  # data %<>% dplyr::rename(POP_ID = tidyselect::contains("STRATA"))
+
+
+  # removing spaces in data$STRATA, pop.levels and pop.labels
+  if (!is.null(pop.levels)) {
+    if (is.null(pop.labels)) {
+      pop.labels <- pop.levels <- clean_pop_names(pop.levels)
+    }
+    if (dplyr::n_distinct(data$STRATA) != length(pop.levels)) {
+      rlang::abort("The number of STRATA in the data is different than the number of pop.levels: check argument and data")
+    }
+  }
+
+  if (!is.null(pop.labels)) {
+    if (is.null(pop.levels)) rlang::abort("pop.levels is required if you use pop.labels")
+    if (length(pop.labels) != length(pop.levels)) rlang::abort("pop.levels and pop.labels with different length: check arguments")
+    pop.labels <- clean_pop_names(pop.labels)
+  }
+
+  # in the data
+  data$STRATA %<>% clean_pop_names(x = .)
+
+  # convert STRATA to factor and change names-----------------------------------
+
+  if (is.null(pop.levels)) { # no pop.levels
+    data$STRATA %<>% factor(x = .)
+  } else {# with pop.levels
+    data$STRATA %<>% factor(x = ., levels = pop.levels, ordered = FALSE)
+    levels(data$STRATA) <- pop.labels
+  }
+  data %<>% dplyr::arrange(STRATA, INDIVIDUALS)
+  return(data)
+}# end function change_pop_names
+
+
+
+
+
+# Check pop.levels and pop.labels --------------------------------------------
+
+#' @name check_pop_levels
+#' @title Check the use of pop.levels, pop.labels and pop.select arguments.
+#' @description Check that pop.levels and pop.labels and pop.select arguments
+#' are used correctly and that the values are cleaned for spaces.
+
+#' @inheritParams tidy_genome
+#' @inheritParams read_strata
+
+#' @rdname check_pop_levels
+#' @param pop.select (optional, string) Selected list of populations for
+#' the analysis. e.g. \code{pop.select = c("QUE", "ONT")} to select \code{QUE}
+#' and \code{ONT} population samples (out of 20 pops). If \code{pop.labels}
+#' argument was used to rename the strata column, use the new names with
+#' \code{pop.select}.
+#' Default: \code{pop.select = NULL}.
+#'
+#' @export
+#' @author Thierry Gosselin \email{thierrygosselin@@icloud.com}
+
+
+check_pop_levels <- function(
+    pop.levels = NULL,
+    pop.labels = NULL,
+    pop.select = NULL
+) {
+
+  # checks ---------------------------------------------------------------------
+  # removing spaces in data$POP_ID, pop.levels and pop.labels
+  if (!is.null(pop.levels) && is.null(pop.labels)) {
+    pop.labels <- pop.levels <- clean_pop_names(x = pop.levels, factor = FALSE)
+  }
+
+  if (!is.null(pop.labels)) {
+    if (is.null(pop.levels)) rlang::abort("pop.levels is required if you use pop.labels")
+    if (length(pop.labels) != length(pop.levels)) {
+      rlang::abort("pop.levels and pop.labels with different length: check arguments")
+    }
+    pop.levels <- clean_pop_names(x = pop.levels, factor = FALSE)
+    pop.labels <- clean_pop_names(x = pop.labels, factor = FALSE)
+  }
+  if (!is.null(pop.select)) pop.select <- clean_pop_names(x = pop.select, factor = FALSE)
+  return(res = list(pop.levels = pop.levels, pop.labels = pop.labels, pop.select = pop.select))
+}# end function change_pop_names
+
+
+
+# join_strata ------------------------------------------------------------------
+
+#' @name join_strata
+#' @title Join the strata with the data
+#' @description The function first filters individuals in data then include the
+#' strata.
+#' @param data A tidy dataset object.
+#' Documented in \code{\link{tidy_genome}}.
+#' @return The data filtered by the strata by individuals.
+
+#' @examples
+#' \dontrun{
+#' data <- genometranslator::join_strata(
+#'     data = my_tidy_dataset_object,
+#'     strata = my_strata_object)
+#' }
+
+
+#' @seealso \code{\link{read_strata}}, \code{\link{summary_strata}},
+#' \code{\link{individuals2strata}}, \code{\link{change_pop_names}},
+#' \code{\link{generate_strata}}
+
+
+
+#' @rdname join_strata
+#' @param pop.id (logical) When \code{pop.id = TRUE}, the strata returns
+#' the stratification colname \code{POP_ID}.
+#' With the default, Returns \code{STRATA}.
+#' Default: \code{pop.id = FALSE}.
+#'
+#' @param strata (path or object) The strata file or object.
+#' Additional documentation is available in \code{\link{read_strata}}.
+#' Use that function to whitelist/blacklist populations/individuals.
+#' Option to set \code{pop.levels/pop.labels} is also available.
+#' Default: \code{strata = NULL}.
+#' @param verbose Logical indicating whether progress messages are emitted.
+#' Default: \code{verbose = TRUE}.
+#'
+#' @export
+
+#' @author Thierry Gosselin \email{thierrygosselin@@icloud.com}
+
+join_strata <- function(data, strata = NULL, pop.id = FALSE, verbose = TRUE) {
+  if (is.null(strata)) return(data)
+  if (verbose) message("Synchronizing data and strata...")
+  data %<>% dplyr::select(-tidyselect::any_of(c("POP_ID", "STRATA")))
+  strata %<>% dplyr::filter(INDIVIDUALS %in% data$INDIVIDUALS)
+
+  if (nrow(strata) == 0) {
+    rlang::abort("No more individuals in your data, check data and strata ID names...")
+  }
+
+  data %<>% dplyr::filter(INDIVIDUALS %in% strata$INDIVIDUALS)
+  if (nrow(data) == 0) {
+    rlang::abort("No more individuals in your data, check data and strata ID names...")
+  }
+
+  suppressWarnings(data %<>% dplyr::left_join(strata, by = "INDIVIDUALS"))
+  if (verbose) {
+    if (rlang::has_name(data, "POP_ID")) {
+      message("    Number of strata: ", length(unique(data$POP_ID)))
+      data %<>% dplyr::select(POP_ID, INDIVIDUALS, tidyselect::everything())
+    }
+    if (rlang::has_name(data, "STRATA")) {
+      message("    Number of strata: ", length(unique(data$STRATA)))
+      data %<>% dplyr::select(STRATA, INDIVIDUALS, tidyselect::everything())
+    }
+    message("    Number of individuals: ", length(unique(data$INDIVIDUALS)))
+  }
+
+  if (isTRUE(pop.id) && rlang::has_name(data, "STRATA")) {
+    data %<>% dplyr::rename(POP_ID = STRATA)
+  }
+
+  return(data)
+}#End join_strata
+
+
+# generate_strata ------------------------------------------------------------------
+
+#' @name generate_strata
+#' @title Generate strata object from the data
+#' @description Generate a strata object from the data.
+#' The function uses the \code{POP_ID} or \code{STRATA} columns along the
+#' \code{INDIVIDUALS}.
+
+#' @inheritParams join_strata
+#' @seealso \code{\link{read_strata}}, \code{\link{summary_strata}},
+#' \code{\link{individuals2strata}}, \code{\link{change_pop_names}},
+#' \code{\link{join_strata}}
+
+#' @rdname generate_strata
+#' @param pop.id (logical) When \code{pop.id = TRUE}, the strata returns
+#' the stratification colname \code{POP_ID}.
+#' With the default, Returns \code{STRATA}.
+#' Default: \code{pop.id = FALSE}.
+#'
+#' @export
+
+#' @author Thierry Gosselin \email{thierrygosselin@@icloud.com}
+
+generate_strata <- function(data, pop.id = FALSE) {
+  data %<>% dplyr::ungroup(.)
+  if (rlang::has_name(data, "POP_ID")) {
+    data %<>%
+      dplyr::distinct(POP_ID, INDIVIDUALS) %>%
+      dplyr::arrange(POP_ID, INDIVIDUALS)
+    if (!pop.id) data %<>% dplyr::rename(STRATA = POP_ID)
+  }
+
+  if (rlang::has_name(data, "STRATA")) {
+    data %<>%
+      dplyr::distinct(STRATA, INDIVIDUALS) %>%
+      dplyr::arrange(STRATA, INDIVIDUALS)
+    if (pop.id) data %<>% dplyr::rename(POP_ID = STRATA)
+  }
+  return(data)
+}#End join_strata
+
+
+# strata_haplo -----------------------------------------------------------------
+
+#' @title strata_haplo
+#' @description Manage strata
+#' @rdname strata_haplo
+#' @keywords internal
+#' @param blacklist.id
+#' Default: \code{blacklist.id = NULL}.
+#'
+#' @param data
+#' Default: \code{data = NULL}.
+#'
+#' @param strata
+#' Default: \code{strata = NULL}.
+#'
+#' @export
+strata_haplo <- function(strata = NULL, data = NULL, blacklist.id = NULL) {
+
+  if (is.null(strata)) {
+    message("No strata file provided")
+    message("    generating a strata with 1 grouping")
+    if (is.null(data)) rlang::abort("data required to generate strata")
+    strata.df <- readr::read_tsv(
+      file = data,
+      n_max = 1,
+      na = "-",
+      col_names = FALSE,
+      col_types = readr::cols(.default = readr::col_character())) %>%
+      tidyr::pivot_longer(
+        data = .,
+        cols = tidyselect::everything(),
+        names_to = "DELETE",
+        values_to = "INDIVIDUALS"
+      ) %>%
+      dplyr::mutate(INDIVIDUALS = clean_ind_names(INDIVIDUALS)) %>%
+      dplyr::select(-DELETE) %>%
+      dplyr::filter(!INDIVIDUALS %in% c("Catalog ID", "Cnt")) %>%
+      dplyr::distinct(INDIVIDUALS) %>%
+      dplyr::mutate(STRATA = rep("pop1", n()))
+  } else {
+    if (is.vector(strata)) {
+      suppressMessages(
+        strata.df <- readr::read_tsv(
+          file = strata, col_names = TRUE,
+          # col_types = col.types
+          col_types = readr::cols(.default = readr::col_character())
+        )
+      )
+    } else {
+      strata.df <- strata
+    }
+  }
+
+  colnames(strata.df) <- stringi::stri_replace_all_fixed(
+    str = colnames(strata.df),
+    pattern = "STRATA",
+    replacement = "POP_ID",
+    vectorize_all = FALSE
+  )
+  # Remove potential whitespace in pop_id
+  strata.df$POP_ID <- clean_pop_names(strata.df$POP_ID)
+  colnames.strata <- colnames(strata.df)
+
+  # clean ids
+  strata.df$INDIVIDUALS <- clean_ind_names(strata.df$INDIVIDUALS)
+
+  # filtering the strata if blacklist id available
+  if (!is.null(blacklist.id)) {
+    strata.df <- dplyr::anti_join(x = strata.df, y = blacklist.id, by = "INDIVIDUALS")
+  }
+
+  strata.df <- dplyr::distinct(strata.df, POP_ID, INDIVIDUALS)
+  return(strata.df)
+}#End strata_haplo
+
+# read_blacklist_id -----------------------------------------------------------------
+#' @name read_blacklist_id
+#' @title read_blacklist_id
+#' @description Read a file or object with blacklisted individuals.
+#' Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
+#' and might be of interest for users.
+
+#' @param blacklist.id (optional, path or object) A blacklist file in the working directory
+#' or object in the global environment. The data frame
+#' as 1 column (named \code{INDIVIDUALS}) and is filled with the individual IDs
+#' The ids are cleaned with \code{\link{clean_ind_names}} for separators,
+#' only \code{-} are tolerated. Duplicates are removed automatically.
+#' Default: \code{blacklist.id = NULL}.
+
+#' @inheritParams genometranslator_common_arguments
+
+#' @rdname read_blacklist_id
+#' @export
+#' @return A tibble with column \code{INDIVIDUALS}.
+#' @examples
+#' \dontrun{
+#' bl <- genometranslator::read_blacklist_id("blacklist.tsv")
+#' }
+#' @template io-dependencies
+read_blacklist_id <- function(blacklist.id = NULL, verbose = TRUE) {
+  # not necessary here
+  # Common startup -------------------------------------------------------------
+  # .start <- tgbase::startup(
+  #   package = "genometranslator",
+  #   f.name = "read_blacklist_id",
+  #   verbose = verbose
+  # )
+  # on.exit(tgbase::teardown(.start), add = TRUE)
+
+  if (is.null(blacklist.id)) return(NULL)
+  if (is.vector(blacklist.id)) {
+    blacklist.id <- vroom::vroom(
+      file = blacklist.id,
+      col_types = vroom::cols(.default = "c"),
+      show_col_types = FALSE
+    )
+  } else {
+    blacklist.id <- dplyr::mutate(
+      .data = blacklist.id,
+      dplyr::across(tidyselect::everything(), .fns = as.character)
+    )
+  }
+  if (!rlang::has_name(blacklist.id, "INDIVIDUALS")) {
+    rlang::abort("Blacklist of individuals should have 1 column named: INDIVIDUALS")
+  }
+  blacklist.id$INDIVIDUALS <- clean_ind_names(blacklist.id$INDIVIDUALS)
+
+  # remove potential duplicate id
+  dup <- dplyr::distinct(.data = blacklist.id, INDIVIDUALS)
+  blacklist.id.dup <- nrow(blacklist.id) - nrow(dup)
+  if (blacklist.id.dup > 1) {
+    if (verbose) cli::cli_alert_info("Duplicate id's in blacklist: ", blacklist.id.dup)
+    blacklist.id <- dup
+  }
+  dup <- blacklist.id.dup <- NULL
+  if (verbose) message("Number of individuals in blacklist: ", nrow(blacklist.id))
+  return(blacklist.id)
+}#End read_blacklist_id
