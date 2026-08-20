@@ -92,3 +92,4 @@ tidy.data <- genometranslator::separate_markers(data = bluefintuna.data)
 \author{
 Thierry Gosselin \email{thierrygosselin@icloud.com}
 }
+\keyword{internal}

@@ -25,3 +25,4 @@ Splits a vector of genotype strings into one row per genotype and one column
 per allele. The implementation is vectorized and does not require parallel
 processing.
 }
+\keyword{internal}

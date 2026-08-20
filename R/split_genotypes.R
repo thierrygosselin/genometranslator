@@ -12,6 +12,7 @@
 #'
 #' Default: \code{alleles.naming = NULL}.
 #' @return A tibble with one row per genotype and one allele per column.
+#' @keywords internal
 #' @export
 split_genotypes <- function(x, separator = "/", alleles.naming = NULL) {
   if (!is.character(x)) x <- as.character(x)

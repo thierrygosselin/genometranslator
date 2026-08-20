@@ -66,6 +66,7 @@
 #' \code{CHROM}, \code{LOCUS}, \code{POS}. Additionnal columns may be genrated,
 #' see arguments documentation.
 #' @rdname separate_markers
+#' @keywords internal
 
 #' @examples
 #' \dontrun{
@@ -308,5 +309,4 @@ generate_markers_metadata <- function(
   }
   return(data)
 }#End generate_markers_metadata
-
 

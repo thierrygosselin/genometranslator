@@ -50,3 +50,4 @@ A list with:
 \description{
 Filter non-biallelic / haplotype-style variants in a radiator GDS
 }
+\keyword{internal}

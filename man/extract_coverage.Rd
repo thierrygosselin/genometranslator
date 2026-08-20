@@ -67,3 +67,4 @@ look for the DP and AD info in the FORMAT field.
 
 Extract coverage information from a GDS file
 }
+\keyword{internal}

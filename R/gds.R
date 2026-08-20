@@ -1425,7 +1425,7 @@ extract_genotypes_metadata <- function(
 #' @param dart.check (optional, logical) DArT have different reporting for coverage
 #' information. Will no longer report the average coverage stats from 1 and 2-rows DArT format.
 #' Default: \code{dart.check = FALSE}.
-# @keywords internal
+#' @keywords internal
 #' @export
 
 check_coverage <- function(gds, genotypes.metadata.check = FALSE, stacks.haplo.check = FALSE, dart.check = FALSE){

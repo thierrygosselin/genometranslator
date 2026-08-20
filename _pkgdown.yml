@@ -89,8 +89,6 @@ reference:
   - extract_dart_target_id
   - extract_dart_markers_metadata
   - tidy_dart_metadata
-  - calibrate_alleles
-  - dart_genotyping_strategy
 
 - title: VCF and bcftools utilities
   contents:
@@ -99,24 +97,12 @@ reference:
   - indexing_vcf
   - check_header_source_vcf
   - extract_individuals_vcf
-  - tidy_vcf
-  - filter_vcf_filter_column
-  - filter_haplotype_format
-  - filter_duplicated_markers_strands
 
 - title: Genotype and marker utilities
   contents:
-  - split_genotypes
-  - separate_gt
-  - separate_markers
-  - gt_recoding
-  - clean_markers_names
-  - generate_markers_metadata
-  - check_coverage
   - extract_genotypes_metadata
   - extract_individuals_metadata
   - extract_markers_metadata
-  - tidy_plink
 
 - title: Whitelists and blacklists
   desc: Import lists used to retain or exclude samples and markers.

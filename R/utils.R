@@ -8,6 +8,7 @@
 #' and might be of interest for users.
 #' @param x (character string) Markers character string.
 #' @rdname clean_markers_names
+#' @keywords internal
 #' @export
 clean_markers_names <- function(x) {
   x <- stringi::stri_replace_all_fixed(

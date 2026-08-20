@@ -498,6 +498,7 @@ read_plink <- function(
 #' 
 #' @export
 #' @rdname tidy_plink
+#' @keywords internal
 #' @author Thierry Gosselin \email{thierrygosselin@@icloud.com}
 
 tidy_plink <- function(

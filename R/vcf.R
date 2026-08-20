@@ -965,6 +965,7 @@ if (verbose) message("VCF-specific filters")
 #'
 #' @export
 #' @rdname tidy_vcf
+#' @keywords internal
 
 #' @return The output in your global environment is a tidy data frame, the GDS file
 #' generated is in the working directory under the name given during function execution.
@@ -3118,6 +3119,7 @@ filter_duplicated_markers_strands <- function(
 #'
 #' @name filter_haplotype_format
 #' @rdname filter_haplotype_format
+#' @keywords internal
 #' @export
 filter_haplotype_format <- function(
     gds,

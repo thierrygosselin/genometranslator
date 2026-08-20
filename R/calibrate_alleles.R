@@ -62,6 +62,7 @@
 
 #' @export
 #' @rdname calibrate_alleles
+#' @keywords internal
 #' @author Thierry Gosselin \email{thierrygosselin@@icloud.com}
 
 calibrate_alleles <- function(

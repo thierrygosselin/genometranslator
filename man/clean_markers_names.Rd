@@ -18,3 +18,4 @@ or codes. \code{/}, \code{:}, \code{-} and \code{.} are changed to an underscore
 Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
 and might be of interest for users.
 }
+\keyword{internal}
