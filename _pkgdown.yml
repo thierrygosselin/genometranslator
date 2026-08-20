@@ -1,0 +1,125 @@
+url: https://thierrygosselin.github.io/genometranslator/
+
+template:
+  bootstrap: 5
+
+navbar:
+  type: default
+  left:
+  - text: Installation
+    href: index.html
+  - text: Get started
+    href: articles/using_genometranslator.html
+  - text: Reference
+    href: reference/index.html
+  - text: News
+    href: news/index.html
+  right:
+  - icon: fa-github fa-lg
+    aria-label: GitHub
+    href: https://github.com/thierrygosselin/genometranslator
+
+reference:
+
+- title: Core workflow
+  desc: Read, inspect, and translate genomic data.
+  contents:
+  - read_genome
+  - write_genome
+  - genome_translator
+  - tidy_genome
+  - genome_info
+  - genometranslator_dependencies
+
+- title: Sample metadata and strata
+  desc: Prepare, validate, summarize, and modify sample groupings.
+  contents:
+  - read_strata
+  - summary_strata
+  - individuals2strata
+  - generate_strata
+  - join_strata
+  - change_pop_names
+  - clean_ind_names
+  - clean_pop_names
+  - check_pop_levels
+  - vcf_strata
+
+- title: Read genomic data
+  desc: Format-specific readers offering additional control.
+  contents:
+  - read_dart
+  - read_fstat
+  - read_genepop
+  - read_genind
+  - read_genlight
+  - read_gtypes
+  - read_plink
+  - read_vcf
+
+- title: Write genomic data
+  desc: Export genomic data without silently filtering samples or markers.
+  contents:
+  - starts_with("write_")
+
+- title: Detect formats and encoding
+  contents:
+  - detect_genomic_format
+  - detect_dart_format
+  - detect_gt
+  - detect_biallelic_markers
+  - detect_indexing
+
+- title: Work with GDS
+  contents:
+  - genome_gds
+  - genome_gds_skeleton
+  - summary_gds
+  - update_genome_gds
+  - upgrade_genome_gds
+  - sync_gds
+  - tidy2gds
+  - parse_gds_metadata
+  - genome_parameters
+  - list_filters
+  - reset_filters
+
+- title: DArT utilities
+  contents:
+  - extract_dart_target_id
+  - extract_dart_markers_metadata
+  - tidy_dart_metadata
+  - calibrate_alleles
+  - dart_genotyping_strategy
+
+- title: VCF and bcftools utilities
+  contents:
+  - bcftools_require
+  - bcftools_exec
+  - indexing_vcf
+  - check_header_source_vcf
+  - extract_individuals_vcf
+  - tidy_vcf
+  - filter_vcf_filter_column
+  - filter_haplotype_format
+  - filter_duplicated_markers_strands
+
+- title: Genotype and marker utilities
+  contents:
+  - split_genotypes
+  - separate_gt
+  - separate_markers
+  - gt_recoding
+  - clean_markers_names
+  - generate_markers_metadata
+  - check_coverage
+  - extract_genotypes_metadata
+  - extract_individuals_metadata
+  - extract_markers_metadata
+  - tidy_plink
+
+- title: Whitelists and blacklists
+  desc: Import lists used to retain or exclude samples and markers.
+  contents:
+  - read_blacklist_id
+  - read_whitelist
