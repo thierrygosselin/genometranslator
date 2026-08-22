@@ -12,7 +12,7 @@ read_genome(
   check = TRUE,
   import.metadata = TRUE,
   parallel.core = parallel::detectCores() - 1,
-  verbose = FALSE
+  verbose = TRUE
 )
 }
 \arguments{
@@ -42,9 +42,9 @@ Default: \code{import.metadata = TRUE}.}
 \item{parallel.core}{Number of processor cores passed to readers that support
 parallel processing. Default: \code{parallel.core = parallel::detectCores() - 1}.}
 
-\item{verbose}{(optional, logical) \code{verbose = TRUE} to be chatty
-during execution.
-Default: \code{verbose = FALSE}.}
+\item{verbose}{Logical. Display progress messages. For GDS input, the
+current number of samples and markers and a summary of active filters are
+displayed. Default: \code{verbose = TRUE}.}
 }
 \value{
 A tidy genomic data frame or

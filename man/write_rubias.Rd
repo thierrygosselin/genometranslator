@@ -2,43 +2,81 @@
 % Please edit documentation in R/write_rubias.R
 \name{write_rubias}
 \alias{write_rubias}
-\title{Write a rubias object}
+\title{Write data in rubias format}
 \usage{
 write_rubias(
   data,
   strata = NULL,
   filename = NULL,
-  parallel.core = parallel::detectCores() - 1
+  parallel.core = parallel::detectCores() - 1,
+  verbose = TRUE
 )
 }
 \arguments{
-\item{data}{A supported genomic file, object, or tidy genomic data frame.
-Default: \code{data = NULL}.}
+\item{data}{A GDS file or object, or another genomic object accepted by
+\code{\link[=read_genome]{read_genome()}}.}
 
-\item{strata}{(optional, tibble file or object) This tibble of individual's
-metadata must contain
-four columns: \code{SAMPLE_TYPE, REPUNIT, COLLECTION, INDIVIDUALS}. Those columns
-are described in \strong{rubias}.
-With the default, With default, \code{SAMPLE_TYPE} is filled
-with \code{reference}. \code{REPUNIT} and \code{COLLECTION} will be filled by
-the \code{STRATA} or \code{POP_ID} column found in the data.
-Default: \code{strata = NULL}.}
+\item{strata}{Optional sample metadata accepted by \code{\link[=read_strata]{read_strata()}}. Supply
+\code{SAMPLE_TYPE}, \code{REPUNIT}, \code{COLLECTION}, and \code{INDIVIDUALS} for full control.
+Lower-case rubias names are also accepted. When these fields are absent,
+\code{STRATA} or \code{POP_ID} is used for both \code{repunit} and \code{collection}, and all
+samples are treated as references. Default: \code{strata = NULL}.}
 
-\item{filename}{The prefix for the name of the file written to the working directory.
-Default: \code{filename = NULL}.
-With default, only the rubias object is generated. The filename will be appended
-\code{_rubias.tsv}.}
+\item{filename}{Optional filename prefix. When supplied, the result is written
+as \verb{<filename>_rubias.tsv}; a timestamp is added rather than overwriting an
+existing file. Default: \code{filename = NULL}.}
 
-\item{parallel.core}{Number of workers available for parallel operations.
+\item{parallel.core}{Number of workers available while importing or
+transforming supported inputs. Retained for consistency with other writers.
 Default: \code{parallel.core = parallel::detectCores() - 1}.}
+
+\item{verbose}{Logical. Display progress messages. Default:
+\code{verbose = TRUE}.}
 }
 \value{
-A rubias object in the global environment and a file is written in the
-working directory if \code{filename} argument was used.
+A tibble compatible with rubias. When \code{filename} is supplied, the
+same table is also written as a tab-separated file.
 }
 \description{
-Write a rubias object from a tidy data frame or GDS file/object.
+Convert a supported genomic dataset to the diploid,
+two-column-per-locus data frame used by \pkg{rubias}. The first four columns
+are \code{sample_type}, \code{repunit}, \code{collection}, and \code{indiv}.
 }
+\details{
+rubias requires one row per diploid individual and four leading
+character columns:
+\itemize{
+\item \code{sample_type} must be \code{"reference"} or \code{"mixture"};
+\item reference samples require non-missing \code{repunit} and \code{collection};
+\item mixture samples require \code{repunit = NA}, while \code{collection} identifies
+the mixture sample, port, stratum, place, or time group;
+\item \code{indiv} must uniquely identify every individual.
+}
+Missing genotypes are written as two \code{NA} alleles. Partial diploid genotypes
+are rejected. Locus names cannot contain spaces because rubias uses adjacent
+columns to identify gene copies.
+
+This writer creates an input representation; it does not run the conditional
+GSI model and does not silently filter individuals or loci. Quality control,
+marker selection, reference design, and the distinction between reference and
+mixture samples remain the user's responsibility.
+}
+\section{Dependencies}{
+
+The output schema follows the documented interface of
+\href{https://github.com/eriqande/rubias}{rubias}, developed by Eric C.
+Anderson and Ben Moran. Installing rubias is not required to create the table,
+but is required to analyse it. This implementation is independently written
+from the public input specification; no rubias source code is incorporated.
+
+
+Required package dependencies are declared in \code{DESCRIPTION} and are
+installed with \pkg{genometranslator}. Any additional dependency needed only
+for this format or option is identified in this help page. Use
+\code{genometranslator_dependencies()} to inspect the availability of core
+packages, optional packages, and external executables.
+}
+
 \section{Data filtering}{
 
 This writer does not silently filter markers or individuals. It may validate
@@ -50,32 +88,12 @@ before generating the output. Use
 suitable workflow when filtering is required.
 }
 
-\section{Dependencies}{
-
-Required package dependencies are declared in \code{DESCRIPTION} and are
-installed with \pkg{genometranslator}. Any additional dependency needed only
-for this format or option is identified in this help page. Use
-\code{genometranslator_dependencies()} to inspect the availability of core
-packages, optional packages, and external executables.
-}
-
 \references{
-Moran BM, and Anderson, E. C. 2018 Bayesian inference from the
-conditional genetic stock identification model.
-Can. J. Fish. Aquat. Sci. 76: 551-560.
-
-Anderson, Eric C., Robin S. Waples, and Steven T. Kalinowski. (2008)
-An improved method for predicting the accuracy of genetic stock identification.
-Canadian Journal of Fisheries and Aquatic Sciences 65, 7:1475-1486.
-
-Anderson, E. C. (2010) Assessing the power of informative subsets of
-loci for population assignment: standard methods are upwardly biased.
-Molecular ecology resources 10, 4:701-710.
+Moran BM, Anderson EC (2019). Bayesian inference from the
+conditional genetic stock identification model. Canadian Journal of
+Fisheries and Aquatic Sciences, 76(4), 551-560.
+\doi{10.1139/cjfas-2018-0016}.
 }
 \seealso{
-\href{https://github.com/eriqande/rubias}{rubias}: genetic stock
-identification (GSI) in the tidyverse.
-}
-\author{
-Thierry Gosselin \email{thierrygosselin@icloud.com}
+\href{https://github.com/eriqande/rubias}{rubias}, \code{\link[=write_gsi_sim]{write_gsi_sim()}}
 }

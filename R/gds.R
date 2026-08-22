@@ -2231,11 +2231,65 @@ sync_gds <- function(
   # return(gds)
 }#End sync_gds
 
+# Active GDS filters -----------------------------------------------------------
+active_gds_filters <- function(gds) {
+  clean_filters <- function(x) {
+    filters <- unique(as.character(x$FILTERS))
+    filters <- filters[
+      !is.na(filters) & nzchar(filters) & filters != "whitelist"
+    ]
+    sort(filters)
+  }
+
+  individual.filters <- tryCatch(
+    extract_individuals_metadata(
+      gds = gds,
+      ind.field.select = "FILTERS",
+      blacklist = FALSE,
+      verbose = FALSE
+    ),
+    error = function(e) data.frame(FILTERS = character())
+  )
+  marker.filters <- tryCatch(
+    extract_markers_metadata(
+      gds = gds,
+      markers.meta.select = "FILTERS",
+      blacklist = FALSE,
+      verbose = FALSE
+    ),
+    error = function(e) data.frame(FILTERS = character())
+  )
+
+  list(
+    individuals = clean_filters(individual.filters),
+    markers = clean_filters(marker.filters)
+  )
+}
+
+gds_open_summary <- function(gds) {
+  current <- SeqArray::seqGetFilter(gds)
+  filters <- active_gds_filters(gds)
+  n.individual.filters <- length(filters$individuals)
+  n.marker.filters <- length(filters$markers)
+
+  message("GDS summary:")
+  message("    Samples: ", sum(current$sample.sel))
+  message("    Markers: ", sum(current$variant.sel))
+  message(
+    "    Active filters: ",
+    n.individual.filters + n.marker.filters,
+    " (samples: ", n.individual.filters,
+    ", markers: ", n.marker.filters, ")"
+  )
+  invisible(filters)
+}
+
 # list_filters------------------------------------------------------------------
 #' @name list_filters
 #' @rdname list_filters
-#' @title List current active filters (individuals and markers) in radiator GDS object.
-#' @description List current active filters (individuals and markers) in radiator GDS object.
+#' @title List current active filters in a genometranslator GDS object
+#' @description List current active filters for individuals and markers in a
+#' genometranslator GDS object.
 #' @inheritParams genometranslator_common_arguments
 #' @export
 #' @examples
@@ -2255,25 +2309,21 @@ list_filters <- function(gds) {
     rlang::abort("Input not supported for this function: read function documentation")
   }
   if (data.type == "gds.file") {
-    gds <- genometranslator::read_genome(gds)
+    gds <- genometranslator::read_genome(gds, verbose = FALSE)
     data.type <- "SeqVarGDSClass"
   }
-  i <- extract_individuals_metadata(gds = gds, ind.field.select = "FILTERS", blacklist = FALSE) %>%
-    dplyr::count(FILTERS, FILTERS) #%>% readr::write_tsv(x = i, file = "filters.individuals.tsv")
-  i %<>% dplyr::filter(FILTERS != "whitelist")
-  message("Number of filters for individuals: ", nrow(i))
-  if (nrow(i) > 0) {
+  filters <- active_gds_filters(gds)
+  message("Number of filters for individuals: ", length(filters$individuals))
+  if (length(filters$individuals) > 0L) {
     message("Filter(s): ")
-    message(stringi::stri_join(i$FILTERS, collapse = "\n"))
+    message(stringi::stri_join(filters$individuals, collapse = "\n"))
   }
-  m <- extract_markers_metadata(gds = gds, markers.meta.select = "FILTERS", blacklist = FALSE) %>%
-    dplyr::count(FILTERS, FILTERS) #%>% readr::write_tsv(x = i, file = "filters.individuals.tsv")
-  m %<>% dplyr::filter(FILTERS != "whitelist")
-  message("\nNumber of filters for markers: ", nrow(m))
-  if (nrow(m) > 0) {
+  message("\nNumber of filters for markers: ", length(filters$markers))
+  if (length(filters$markers) > 0L) {
     message("Filter(s): ")
-    message(stringi::stri_join(m$FILTERS, collapse = "\n"))
+    message(stringi::stri_join(filters$markers, collapse = "\n"))
   }
+  invisible(filters)
 }#list_filters
 
 # reset_filters----------------------------------------------------------------------

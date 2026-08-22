@@ -41,9 +41,9 @@
 #' @param import.metadata Logical. Retain columns in addition to the standard
 #' genomic columns when normalizing tabular input.
 #' Default: \code{import.metadata = TRUE}.
-#' @param verbose (optional, logical) \code{verbose = TRUE} to be chatty
-#' during execution.
-#' Default: \code{verbose = FALSE}.
+#' @param verbose Logical. Display progress messages. For GDS input, the
+#' current number of samples and markers and a summary of active filters are
+#' displayed. Default: \code{verbose = TRUE}.
 
 #' @details For GDS file system, \strong{read_genome} will open the GDS connection file
 #' set the filters (variants and samples) based on the info found in the file.
@@ -72,7 +72,7 @@ read_genome <- function(
     check = TRUE,
     import.metadata = TRUE,
     parallel.core = parallel::detectCores() - 1,
-    verbose = FALSE
+    verbose = TRUE
 ) {
 
   # Common startup -------------------------------------------------------------
@@ -138,7 +138,10 @@ read_genome <- function(
   }
 
   # An existing GDS connection needs no file import.
-  if (identical(data.type, "SeqVarGDSClass")) return(data)
+  if (identical(data.type, "SeqVarGDSClass")) {
+    if (verbose) gds_open_summary(data)
+    return(data)
+  }
 
   # arrow parquet file ---------------------------------------------------------
   if ("arrow.parquet" %in% data.type) {
@@ -211,10 +214,6 @@ read_genome <- function(
       whitelist = TRUE
     ) %$%
       VARIANT_ID
-    if (verbose) message("Setting filters to:")
-    if (verbose) message("    number of samples: ", length(s))
-    if (verbose) message("    number of markers: ", length(m))
-
     SeqArray::seqSetFilter(object = data,
                            variant.id = m,
                            sample.id = as.character(s),
@@ -230,6 +229,7 @@ read_genome <- function(
         rlang::abort("Number of markers don't match, contact author")
       }
     }
+    if (verbose) gds_open_summary(data)
     return(data)
   }#End gds.file
 

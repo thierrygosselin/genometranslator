@@ -2,7 +2,7 @@
 % Please edit documentation in R/gds.R
 \name{list_filters}
 \alias{list_filters}
-\title{List current active filters (individuals and markers) in radiator GDS object.}
+\title{List current active filters in a genometranslator GDS object}
 \usage{
 list_filters(gds)
 }
@@ -11,7 +11,8 @@ list_filters(gds)
 Default: \code{gds = NULL}.}
 }
 \description{
-List current active filters (individuals and markers) in radiator GDS object.
+List current active filters for individuals and markers in a
+genometranslator GDS object.
 }
 \examples{
 \dontrun{
