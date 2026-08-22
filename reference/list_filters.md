@@ -1,7 +1,7 @@
-# List current active filters (individuals and markers) in radiator GDS object.
+# List current active filters in a genometranslator GDS object
 
-List current active filters (individuals and markers) in radiator GDS
-object.
+List current active filters for individuals and markers in a
+genometranslator GDS object.
 
 ## Usage
 

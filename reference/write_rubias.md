@@ -1,6 +1,8 @@
-# Write a rubias object
+# Write data in rubias format
 
-Write a rubias object from a tidy data frame or GDS file/object.
+Convert a supported genomic dataset to the diploid, two-column-per-locus
+data frame used by rubias. The first four columns are `sample_type`,
+`repunit`, `collection`, and `indiv`.
 
 ## Usage
 
@@ -9,7 +11,8 @@ write_rubias(
   data,
   strata = NULL,
   filename = NULL,
-  parallel.core = parallel::detectCores() - 1
+  parallel.core = parallel::detectCores() - 1,
+  verbose = TRUE
 )
 ```
 
@@ -17,34 +20,78 @@ write_rubias(
 
 - data:
 
-  A supported genomic file, object, or tidy genomic data frame. Default:
-  `data = NULL`.
+  A GDS file or object, or another genomic object accepted by
+  [`read_genome()`](https://thierrygosselin.github.io/genometranslator/reference/read_genome.md).
 
 - strata:
 
-  (optional, tibble file or object) This tibble of individual's metadata
-  must contain four columns:
-  `SAMPLE_TYPE, REPUNIT, COLLECTION, INDIVIDUALS`. Those columns are
-  described in **rubias**. With the default, With default, `SAMPLE_TYPE`
-  is filled with `reference`. `REPUNIT` and `COLLECTION` will be filled
-  by the `STRATA` or `POP_ID` column found in the data. Default:
+  Optional sample metadata accepted by
+  [`read_strata()`](https://thierrygosselin.github.io/genometranslator/reference/read_strata.md).
+  Supply `SAMPLE_TYPE`, `REPUNIT`, `COLLECTION`, and `INDIVIDUALS` for
+  full control. Lower-case rubias names are also accepted. When these
+  fields are absent, `STRATA` or `POP_ID` is used for both `repunit` and
+  `collection`, and all samples are treated as references. Default:
   `strata = NULL`.
 
 - filename:
 
-  The prefix for the name of the file written to the working directory.
-  Default: `filename = NULL`. With default, only the rubias object is
-  generated. The filename will be appended `_rubias.tsv`.
+  Optional filename prefix. When supplied, the result is written as
+  `<filename>_rubias.tsv`; a timestamp is added rather than overwriting
+  an existing file. Default: `filename = NULL`.
 
 - parallel.core:
 
-  Number of workers available for parallel operations. Default:
+  Number of workers available while importing or transforming supported
+  inputs. Retained for consistency with other writers. Default:
   `parallel.core = parallel::detectCores() - 1`.
+
+- verbose:
+
+  Logical. Display progress messages. Default: `verbose = TRUE`.
 
 ## Value
 
-A rubias object in the global environment and a file is written in the
-working directory if `filename` argument was used.
+A tibble compatible with rubias. When `filename` is supplied, the same
+table is also written as a tab-separated file.
+
+## Details
+
+rubias requires one row per diploid individual and four leading
+character columns:
+
+- `sample_type` must be `"reference"` or `"mixture"`;
+
+- reference samples require non-missing `repunit` and `collection`;
+
+- mixture samples require `repunit = NA`, while `collection` identifies
+  the mixture sample, port, stratum, place, or time group;
+
+- `indiv` must uniquely identify every individual.
+
+Missing genotypes are written as two `NA` alleles. Partial diploid
+genotypes are rejected. Locus names cannot contain spaces because rubias
+uses adjacent columns to identify gene copies.
+
+This writer creates an input representation; it does not run the
+conditional GSI model and does not silently filter individuals or loci.
+Quality control, marker selection, reference design, and the distinction
+between reference and mixture samples remain the user's responsibility.
+
+## Dependencies
+
+The output schema follows the documented interface of
+[rubias](https://github.com/eriqande/rubias), developed by Eric C.
+Anderson and Ben Moran. Installing rubias is not required to create the
+table, but is required to analyse it. This implementation is
+independently written from the public input specification; no rubias
+source code is incorporated.
+
+Required package dependencies are declared in `DESCRIPTION` and are
+installed with genometranslator. Any additional dependency needed only
+for this format or option is identified in this help page. Use
+[`genometranslator_dependencies()`](https://thierrygosselin.github.io/genometranslator/reference/genometranslator_dependencies.md)
+to inspect the availability of core packages, optional packages, and
+external executables.
 
 ## Data filtering
 
@@ -56,35 +103,14 @@ the intended analysis before generating the output. Use
 [radr](https://thierrygosselin.github.io/radr/) or another suitable
 workflow when filtering is required.
 
-## Dependencies
-
-Required package dependencies are declared in `DESCRIPTION` and are
-installed with genometranslator. Any additional dependency needed only
-for this format or option is identified in this help page. Use
-[`genometranslator_dependencies()`](https://thierrygosselin.github.io/genometranslator/reference/genometranslator_dependencies.md)
-to inspect the availability of core packages, optional packages, and
-external executables.
-
 ## References
 
-Moran BM, and Anderson, E. C. 2018 Bayesian inference from the
-conditional genetic stock identification model. Can. J. Fish. Aquat.
-Sci. 76: 551-560.
-
-Anderson, Eric C., Robin S. Waples, and Steven T. Kalinowski. (2008) An
-improved method for predicting the accuracy of genetic stock
-identification. Canadian Journal of Fisheries and Aquatic Sciences 65,
-7:1475-1486.
-
-Anderson, E. C. (2010) Assessing the power of informative subsets of
-loci for population assignment: standard methods are upwardly biased.
-Molecular ecology resources 10, 4:701-710.
+Moran BM, Anderson EC (2019). Bayesian inference from the conditional
+genetic stock identification model. Canadian Journal of Fisheries and
+Aquatic Sciences, 76(4), 551-560.
+[doi:10.1139/cjfas-2018-0016](https://doi.org/10.1139/cjfas-2018-0016) .
 
 ## See also
 
-[rubias](https://github.com/eriqande/rubias): genetic stock
-identification (GSI) in the tidyverse.
-
-## Author
-
-Thierry Gosselin <thierrygosselin@icloud.com>
+[rubias](https://github.com/eriqande/rubias),
+[`write_gsi_sim()`](https://thierrygosselin.github.io/genometranslator/reference/write_gsi_sim.md)

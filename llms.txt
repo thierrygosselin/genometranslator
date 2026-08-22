@@ -306,7 +306,7 @@ Export genomic data without silently filtering samples or markers.
   : Write a related file from a tidy data frame
 
 - [`write_rubias()`](https://thierrygosselin.github.io/genometranslator/reference/write_rubias.md)
-  : Write a rubias object
+  : Write data in rubias format
 
 - [`write_snprelate()`](https://thierrygosselin.github.io/genometranslator/reference/write_snprelate.md)
   : Write a SNPRelate object from a tidy data frame
@@ -355,8 +355,7 @@ Export genomic data without silently filtering samples or markers.
 - [`genome_parameters()`](https://thierrygosselin.github.io/genometranslator/reference/genome_parameters.md)
   : Track changes to genomic data
 - [`list_filters()`](https://thierrygosselin.github.io/genometranslator/reference/list_filters.md)
-  : List current active filters (individuals and markers) in radiator
-  GDS object.
+  : List current active filters in a genometranslator GDS object
 - [`reset_filters()`](https://thierrygosselin.github.io/genometranslator/reference/reset_filters.md)
   : Reset filters (individuals and markers) in radiator GDS object.
 

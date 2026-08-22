@@ -67,7 +67,7 @@ file system.</p>
 <span>  check <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  import.metadata <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  parallel.core <span class="op">=</span> <span class="fu">parallel</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/r/parallel/detectCores.html" class="external-link">detectCores</a></span><span class="op">(</span><span class="op">)</span> <span class="op">-</span> <span class="fl">1</span>,</span>
-<span>  verbose <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span>  verbose <span class="op">=</span> <span class="cn">TRUE</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -116,9 +116,9 @@ parallel processing. Default: <code>parallel.core = parallel::detectCores() - 1<
 
 
 <dt id="arg-verbose">verbose<a class="anchor" aria-label="anchor" href="#arg-verbose"></a></dt>
-<dd><p>(optional, logical) <code>verbose = TRUE</code> to be chatty
-during execution.
-Default: <code>verbose = FALSE</code>.</p></dd>
+<dd><p>Logical. Display progress messages. For GDS input, the
+current number of samples and markers and a summary of active filters are
+displayed. Default: <code>verbose = TRUE</code>.</p></dd>
 
 </dl></div>
     <div class="section level2">

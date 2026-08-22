@@ -20,7 +20,7 @@ read_genome(
   check = TRUE,
   import.metadata = TRUE,
   parallel.core = parallel::detectCores() - 1,
-  verbose = FALSE
+  verbose = TRUE
 )
 ```
 
@@ -64,8 +64,9 @@ read_genome(
 
 - verbose:
 
-  (optional, logical) `verbose = TRUE` to be chatty during execution.
-  Default: `verbose = FALSE`.
+  Logical. Display progress messages. For GDS input, the current number
+  of samples and markers and a summary of active filters are displayed.
+  Default: `verbose = TRUE`.
 
 ## Value
 
