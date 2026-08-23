@@ -11,7 +11,8 @@ dart_genotyper(
   markers.metadata = NULL,
   gt.vcf = FALSE,
   gt.vcf.nuc = FALSE,
-  gt = FALSE
+  gt = FALSE,
+  verbose = TRUE
 )
 ```
 
@@ -32,3 +33,7 @@ dart_genotyper(
 - gt:
 
   Default: `gt = FALSE`.
+
+- verbose:
+
+  Logical. Display progress messages. Default: `verbose = TRUE`.
