@@ -508,8 +508,8 @@ write_dadi <- function(
   }
   file.version <- suppressWarnings(
     stringi::stri_join(
-      "#\u2202a\u2202i SNP input file generated with radiator v.",
-      utils::packageVersion("radiator"),
+      "#\u2202a\u2202i SNP input file generated with genometranslator v.",
+      utils::packageVersion("genometranslator"),
       sep = "")
   )
 
@@ -532,5 +532,3 @@ write_dadi <- function(
   message("\u2202a\u2202i input file name written: ", dadi.input.filename)
   return(dadi.input)
 } # End write_dadi
-
-

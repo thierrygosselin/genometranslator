@@ -291,7 +291,12 @@ genome_gds <- function(
   genotypes.meta <- NULL
   message("File written: ", basename(filename))
   data.gds <- genometranslator::write_genome(data = data.gds, filename = filename)
-  if (open) data.gds <- genometranslator::read_genome(data = data.gds)
+  if (open) {
+    data.gds <- genometranslator::read_genome(
+      data = data.gds,
+      verbose = FALSE
+    )
+  }
   return(data.gds)
 } # End rad_gds
 
@@ -2967,6 +2972,7 @@ generate_stats <- function(
 
   # Defaults -------------------------------------------------------------------
   m.stats <- i.stats <- i.info <- m.info <- NULL
+  i.coverage.het.fig <- NULL
 
   if (allele.coverage) mac <- TRUE # by default the mac info is needed...
   if (!markers) {
@@ -3622,6 +3628,61 @@ if (plot) {
       bp.filename = i.fig.filename,
       path.folder = path.folder
     )
+
+    # Individual total coverage and heterozygosity ---------------------------
+    if (coverage && heterozygosity && has.total && has.het) {
+      coverage.het.data <- i.info %>%
+        dplyr::filter(
+          is.finite(COVERAGE_TOTAL),
+          is.finite(HETEROZYGOSITY)
+        )
+
+      if (nrow(coverage.het.data) > 0L) {
+        i.coverage.het.filename <- stringi::stri_join(
+          "individuals_coverage_heterozygosity_", file.date, ".pdf"
+        )
+
+        i.coverage.het.fig <- ggplot2::ggplot(
+          coverage.het.data,
+          ggplot2::aes(x = COVERAGE_TOTAL, y = HETEROZYGOSITY)
+        ) +
+          ggplot2::geom_point(
+            colour = "grey30",
+            alpha = 0.65,
+            size = 1.6
+          ) +
+          ggplot2::labs(
+            title = "Individual total coverage vs heterozygosity",
+            x = "Total read coverage",
+            y = "Observed heterozygosity"
+          ) +
+          ggplot2::theme_bw() +
+          ggplot2::theme(
+            panel.grid.minor = ggplot2::element_blank(),
+            plot.title = ggplot2::element_text(
+              face = "bold",
+              hjust = 0.5
+            )
+          )
+
+        ggplot2::ggsave(
+          filename = file.path(path.folder, i.coverage.het.filename),
+          plot = i.coverage.het.fig,
+          width = 20,
+          height = 16,
+          units = "cm",
+          dpi = 300,
+          useDingbats = FALSE
+        )
+        if (verbose) {
+          message(
+            "Figure written: ",
+            basename(i.coverage.het.filename)
+          )
+        }
+      }
+      coverage.het.data <- NULL
+    }
   }#End individuals
 
   has_all <- function(x, cols) {
@@ -3727,8 +3788,10 @@ i.stats.f.sum <- stringi::stri_join("individuals.qc.stats.summary_", file.date, 
 m.stats.f.sum <- stringi::stri_join("markers.qc.stats.summary_", file.date, ".tsv")# tibble summary stats
 
 if (!markers) m.stats <- m.info <- m.fig <- NULL
-if (!individuals) i.stats <- i.info <- i.fig <- NULL
-if (!plot) m.fig <- i.fig <- NULL
+if (!individuals) {
+  i.stats <- i.info <- i.fig <- i.coverage.het.fig <- NULL
+}
+if (!plot) m.fig <- i.fig <- i.coverage.het.fig <- NULL
 
 
 if (!is.null(m.stats)) {
@@ -3754,7 +3817,15 @@ if (!is.null(m.info)) readr::write_tsv(x = m.info, file = file.path(path.folder,
 if (verbose) cli::cli_process_done()
 
 # return stats ---------------------------------------------------------------
-return(list(i.info = i.info, m.info = m.info, i.stats = i.stats, m.stats = m.stats, i.fig = i.fig, m.fig = m.fig))
+return(list(
+  i.info = i.info,
+  m.info = m.info,
+  i.stats = i.stats,
+  m.stats = m.stats,
+  i.fig = i.fig,
+  i.coverage.het.fig = i.coverage.het.fig,
+  m.fig = m.fig
+))
 }#End generate_stats
 
 # id_qc_helper ---------------------------------------------------------------

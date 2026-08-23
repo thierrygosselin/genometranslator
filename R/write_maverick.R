@@ -138,9 +138,12 @@ write_maverick <- function(
 
 
 
-  p.v <- suppressWarnings(stringi::stri_join(utils::packageVersion("radiator"), collapse = ""))
+  p.v <- suppressWarnings(stringi::stri_join(
+    utils::packageVersion("genometranslator"),
+    collapse = ""
+  ))
   maverick.header <- stringi::stri_join(
-    "#MavericK input file generated with radiator v.", p.v,
+    "#MavericK input file generated with genometranslator v.", p.v,
     ", date and time: ", file.date, sep = "")
 
   filename.connection <- file(filename, "w") # open the connection to the file

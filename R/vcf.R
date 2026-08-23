@@ -1933,8 +1933,10 @@ write_vcf <- function(
 
   # Source ---------------------------------------------------------------------
   if (is.null(source)) {
-    source <- stringi::stri_join("##source=radiator_v.",
-                                 as.character(utils::packageVersion("radiator")))
+    source <- stringi::stri_join(
+      "##source=genometranslator_v.",
+      as.character(utils::packageVersion("genometranslator"))
+    )
     readr::write_delim(
       x = tibble::tibble(source),
       file = filename,
@@ -3453,7 +3455,7 @@ vcf_strata <- function(data, strata, filename = NULL) {
     vcf.header <- tibble::add_row(
       .data = vcf.header,
       VCF_HEADER = stringi::stri_join(
-        "##FORMAT=<ID=", i, ',Number=1,Type=Character,Description="New strata",Source="radiator",Version="', utils::packageVersion("radiator"), '">')
+        "##FORMAT=<ID=", i, ',Number=1,Type=Character,Description="New strata",Source="genometranslator",Version="', utils::packageVersion("genometranslator"), '">')
     )
   }
   # VCF HEADER  ------------------------------------------------------------------

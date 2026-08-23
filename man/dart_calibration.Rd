@@ -4,12 +4,15 @@
 \alias{dart_calibration}
 \title{dart_calibration}
 \usage{
-dart_calibration(switch, genotypes = NULL, metadata = NULL)
+dart_calibration(switch, genotypes = NULL, metadata = NULL, verbose = TRUE)
 }
 \arguments{
 \item{genotypes}{Default: \code{genotypes = NULL}.}
 
 \item{metadata}{Default: \code{metadata = NULL}.}
+
+\item{verbose}{Logical. Display calibration messages.
+Default: \code{verbose = TRUE}.}
 }
 \description{
 Calibrate REF and ALT in DArT imported genotypes or metadata

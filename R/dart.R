@@ -323,10 +323,14 @@ read_dart <- function(
     pop.select = NULL,
     blacklist.id = NULL,
     keep.two = FALSE,
-    verbose = verbose
+    verbose = FALSE
   )
   pop.levels <- strata$pop.levels
   strata <- strata$strata
+  if (verbose) {
+    message("Number of strata: ", dplyr::n_distinct(strata$STRATA))
+    message("Number of individuals: ", dplyr::n_distinct(strata$INDIVIDUALS))
+  }
 
   # Checks  --------------------------------------------------------------------
   strata <- checks_dart_target(
@@ -368,7 +372,8 @@ read_dart <- function(
   )
 
   # Import
-  cli::cli_progress_step(msg = "Big file...", msg_done = "done")
+  genotype.import.start <- proc.time()[["elapsed"]]
+  if (verbose) message("Reading DArT genotypes...")
   genotypes <- purrr::pmap(
     .l = list(strata.split = strata.split),
     .f = import_dart_geno,
@@ -376,11 +381,18 @@ read_dart <- function(
     data = data,
     dart.check = dart.check,
     parallel.core = parallel.core,
-    .progress = TRUE
+    .progress = FALSE
   ) %>%
     purrr::list_rbind(.) %>%
     dplyr::arrange(VARIANT_ID, ID_SEQ)
-  cli::cli_progress_done()
+  if (verbose) {
+    message(
+      "DArT genotypes imported [",
+      round(proc.time()[["elapsed"]] - genotype.import.start, 1),
+      "s]"
+    )
+  }
+  genotype.import.start <- NULL
 
   strata.split <- variant.id <- NULL
 
@@ -389,18 +401,30 @@ read_dart <- function(
   if (verbose) message(stringi::stri_pad_both(str = " Calibration ", width = 80L, pad = "-"), "\n")
 
   if (calibrate.alleles) {
-    switch <- detect_calibration_problem(x = genotypes, dart.check = dart.check)
+    switch <- detect_calibration_problem(
+      x = genotypes,
+      dart.check = dart.check,
+      verbose = verbose
+    )
     n.switch <- switch$n.switch
     switch <- switch$switch
 
     if (n.switch > 0) {
-      markers.meta <- dart_calibration(switch = switch, metadata = markers.meta)
-      genotypes <- dart_calibration(switch = switch, genotypes = genotypes)
+      markers.meta <- dart_calibration(
+        switch = switch,
+        metadata = markers.meta,
+        verbose = verbose
+      )
+      genotypes <- dart_calibration(
+        switch = switch,
+        genotypes = genotypes,
+        verbose = verbose
+      )
     }#End if switching alleles
 
     switch <- n.switch <- NULL
   } else {
-    message("Calibration of alleles was turned off: not recommended")
+    if (verbose) message("Calibration of alleles was turned off: not recommended")
   }
 
   # save markers metadata
@@ -478,7 +502,8 @@ read_dart <- function(
     markers.metadata = markers.meta,
     gt.vcf = dart.strategy$gt.vcf,
     gt.vcf.nuc = dart.strategy$gt.vcf.nuc,
-    gt = dart.strategy$gt
+    gt = dart.strategy$gt,
+    verbose = verbose
   )
   dart.strategy <- NULL
 
@@ -2071,8 +2096,10 @@ import_dart_geno <- function(strata.split, variant.id, data, dart.check, paralle
 #' @description Detect DArT with REF and ALT not calibrated... based on alleles or depth
 #' @rdname detect_calibration_problem
 #' @keywords internal
+#' @param verbose Logical. Display calibration messages.
+#' Default: \code{verbose = TRUE}.
 #' @export
-detect_calibration_problem <- function(x, dart.check) {
+detect_calibration_problem <- function(x, dart.check, verbose = TRUE) {
 
   if ("counts" %in% dart.check$dart.format) {
     switch <- x %>%
@@ -2096,15 +2123,17 @@ detect_calibration_problem <- function(x, dart.check) {
 
   n.switch <- length(switch)
 
-  if (n.switch > 0) {
+  if (n.switch > 0 && verbose) {
     if ("counts" %in% dart.check$dart.format) {
       count.what <- "read depth"
     } else {
       count.what <- "alleles"
     }
-    message("Calibration required...")
-    message("Calibration of alleles based on counts of ", count.what)
-    message("Number of markers impacted: ", n.switch)
+    message(
+      "Calibration required\n",
+      "    Basis: counts of ", count.what, "\n",
+      "    Markers requiring REF/ALT calibration: ", n.switch
+    )
   }
   return(list(switch = switch, n.switch = n.switch))
 }#End detect_calibration_problem
@@ -2119,12 +2148,20 @@ detect_calibration_problem <- function(x, dart.check) {
 #' 
 #' @param genotypes 
 #' Default: \code{genotypes = NULL}.
+#'
+#' @param verbose Logical. Display calibration messages.
+#' Default: \code{verbose = TRUE}.
 #' 
 #' @export
-dart_calibration <- function(switch, genotypes = NULL, metadata = NULL) {
+dart_calibration <- function(
+    switch,
+    genotypes = NULL,
+    metadata = NULL,
+    verbose = TRUE
+) {
   # genotypes recalibration
   if (!is.null(genotypes)) {
-    message("Calibration of REF and ALT alleles in genotypes")
+    if (verbose) message("Calibrating REF/ALT alleles in genotypes")
 
     if (rlang::has_name(genotypes, "ALLELE_REF_DEPTH")) {
       new.gen <- dplyr::bind_rows(
@@ -2149,7 +2186,7 @@ dart_calibration <- function(switch, genotypes = NULL, metadata = NULL) {
 
   # metadata recalibration
   if (!is.null(metadata)) {
-    message("Calibration of REF and ALT alleles in markers metadata")
+    if (verbose) message("Calibrating REF/ALT alleles in marker metadata")
     new.metadata <- dplyr::filter(metadata, VARIANT_ID %in% switch)
 
     switch.ref <- dplyr::select(new.metadata, dplyr::contains("REF")) %>%
@@ -2247,6 +2284,9 @@ dart_genotyping_strategy <- function(
 #' 
 #' @param gt.vcf 
 #' Default: \code{gt.vcf = FALSE}.
+#'
+#' @param verbose Logical. Display progress messages.
+#' Default: \code{verbose = TRUE}.
 #' 
 #' @param markers.metadata 
 #' Default: \code{markers.metadata = NULL}.
@@ -2258,11 +2298,13 @@ dart_genotyper <- function(
     markers.metadata = NULL,
     gt.vcf = FALSE,
     gt.vcf.nuc = FALSE,
-    gt = FALSE
+    gt = FALSE,
+    verbose = TRUE
 ) {
-  message("DArT genotypes normalization")
+  if (verbose) message("DArT genotypes normalization")
 
-  cli::cli_progress_step(msg = "big files takes more time...", msg_done = "done")
+  normalization.start <- proc.time()[["elapsed"]]
+  if (verbose) message("Normalizing DArT genotypes...")
 
   if (gt) gt.vcf.nuc <- TRUE
 
@@ -2374,12 +2416,19 @@ dart_genotyper <- function(
 
   # Sorting by individuals and variant -----------------------------------------
   x %<>% dplyr::arrange(ID_SEQ, VARIANT_ID)
-  cli::cli_progress_done()
-  message("Genotypes formats generated: ")
-  message("ALT_DOSAGE: genotypes based on dosage of alternate allele: 0, 1, 2, NA")
-  if (gt.vcf) message("GT_VCF: genotypes based on VCF format with dosage of alternate allele: 0/0, 0/1, 1/1, ./.)")
-  if (gt.vcf.nuc) message("GT_VCF: genotypes based on VCF format with alleles in nucleotide format: A/C, ./.")
-  if (gt) message("GT: genotypes based on genepop format 6 digits: 001002, 001001, 000000")
+  if (verbose) {
+    message(
+      "DArT genotypes normalized [",
+      round(proc.time()[["elapsed"]] - normalization.start, 1),
+      "s]"
+    )
+    message("Genotype formats generated:")
+    message("ALT_DOSAGE: alternate-allele dosage (0, 1, 2, NA)")
+    if (gt.vcf) message("GT_VCF: VCF dosage format (0/0, 0/1, 1/1, ./.)")
+    if (gt.vcf.nuc) message("GT_VCF_NUC: nucleotide VCF format (A/C, ./.)")
+    if (gt) message("GT: six-digit Genepop format (001002, 001001, 000000)")
+  }
+  normalization.start <- NULL
   return(x)
 }#End dart_genotyper
 
@@ -2666,7 +2715,3 @@ tidy_dart_metadata <- function(
   }
   return(input)
 }#End tidy_dart_metadata
-
-
-
-

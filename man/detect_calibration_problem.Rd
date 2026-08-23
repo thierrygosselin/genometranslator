@@ -4,7 +4,11 @@
 \alias{detect_calibration_problem}
 \title{detect_calibration_problem}
 \usage{
-detect_calibration_problem(x, dart.check)
+detect_calibration_problem(x, dart.check, verbose = TRUE)
+}
+\arguments{
+\item{verbose}{Logical. Display calibration messages.
+Default: \code{verbose = TRUE}.}
 }
 \description{
 Detect DArT with REF and ALT not calibrated... based on alleles or depth

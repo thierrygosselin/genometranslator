@@ -7,7 +7,7 @@
 state and is being actively
 developed.](http://www.repostatus.org/badges/latest/active.svg)](http://www.repostatus.org/#active)
 [![packageversion](https://img.shields.io/badge/Package%20version-0.0.0.9000-orange.svg)](commits/master)
-[![Last-changedate](https://img.shields.io/badge/last%20change-2026--08--20-brightgreen.svg)](/commits/master)
+[![Last-changedate](https://img.shields.io/badge/last%20change-2026--08--23-brightgreen.svg)](/commits/master)
 <!-- badges: end -->
 
 `genometranslator` reads, standardizes, and writes individual genomic
@@ -34,31 +34,17 @@ remotes::install_github("thierrygosselin/tgbase")
 remotes::install_github("thierrygosselin/genometranslator")
 ```
 
-Installing `tgbase` explicitly makes this sequence reliable in a clean R
-environment. Its repository is also recorded in the `Remotes` field for
-GitHub-aware dependency tools.
-
 ### Optional R packages
 
 Install only the packages needed by your workflow:
 
 ``` r
-# genind and genlight support
+# Interested in genind and/or genlight requires: 
 install.packages("adegenet")
-
-# Optional SNPRelate dependency used by write_snprelate(), write_ldna(),
-# and write_faststructure(plink.bed = TRUE)
-BiocManager::install("SNPRelate")
-
-# gtypes support (strataG is no longer on CRAN)
-remotes::install_github("EricArcher/strataG")
 ```
 
 See the documentation for the relevant `read_*` or `write_*` function
-for the exact dependency and data requirements of that format. For
-`gtypes` support, also consult [Eric Archer’s strataG
-repository](https://github.com/EricArcher/strataG), which includes
-current installation information and troubleshooting guidance.
+for the exact dependency and data requirements of that format.
 
 Run the dependency diagnostic after installation:
 
@@ -138,7 +124,7 @@ or DOI is available:
 > Gosselin, T. (2026). *genometranslator: Read, standardize and
 > translate genomic data*. R package version 0.0.0.9000.
 > <https://github.com/thierrygosselin/genometranslator>. Accessed
-> 2026-08-20.
+> 2026-08-23.
 
 ## Website and support
 

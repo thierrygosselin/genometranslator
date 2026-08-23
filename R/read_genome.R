@@ -75,14 +75,6 @@ read_genome <- function(
     verbose = TRUE
 ) {
 
-  # Common startup -------------------------------------------------------------
-  .start <- tgbase::startup(
-    package = "genometranslator",
-    f.name = "read_genome",
-    verbose = verbose
-  )
-  on.exit(tgbase::teardown(.start), add = TRUE)
-
   # detect format---------------------------------------------------------------
   data.type <- detect_genomic_format(data)
 
@@ -136,6 +128,16 @@ read_genome <- function(
       verbose = verbose
     ))
   }
+
+  # Common startup -------------------------------------------------------------
+  # Format-specific readers manage their own lifecycle. Reaching this point
+  # means read_genome itself is handling the input, so only one banner is shown.
+  .start <- tgbase::startup(
+    package = "genometranslator",
+    f.name = "read_genome",
+    verbose = verbose
+  )
+  on.exit(tgbase::teardown(.start), add = TRUE)
 
   # An existing GDS connection needs no file import.
   if (identical(data.type, "SeqVarGDSClass")) {
@@ -485,21 +487,24 @@ write_genome <- function(
       rlang::abort("filename with .arrow.parquet must be provided")
     }
 
-    if (verbose) cli::cli_progress_step(msg = "Writing arrow parquet tidy dataset...")
+    write.start <- proc.time()[["elapsed"]]
+    if (verbose) message("Writing Arrow Parquet dataset...")
 
     # writing arrow parquet file
     tibble::as_tibble(data) %>%
       arrow::write_parquet(x = ., sink = filename)
 
-    if (verbose) cli::cli_progress_done()
-
     if (!is.null(write.message) && verbose) {
       if (write.message == "standard") {
-        message("File written: ", basename(filename))
+        message(
+          "File written: ", basename(filename),
+          " [", round(proc.time()[["elapsed"]] - write.start, 1), "s]"
+        )
       } else {
         write.message
       }
     }
+    write.start <- NULL
   }
 
 }#End write_genome

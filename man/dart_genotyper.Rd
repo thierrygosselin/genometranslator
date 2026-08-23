@@ -10,7 +10,8 @@ dart_genotyper(
   markers.metadata = NULL,
   gt.vcf = FALSE,
   gt.vcf.nuc = FALSE,
-  gt = FALSE
+  gt = FALSE,
+  verbose = TRUE
 )
 }
 \arguments{
@@ -21,6 +22,9 @@ dart_genotyper(
 \item{gt.vcf.nuc}{Default: \code{gt.vcf.nuc = FALSE}.}
 
 \item{gt}{Default: \code{gt = FALSE}.}
+
+\item{verbose}{Logical. Display progress messages.
+Default: \code{verbose = TRUE}.}
 }
 \description{
 Normalization of DArT genotypes
