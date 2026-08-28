@@ -24,7 +24,7 @@ write_bayescan(
 
   A GDS file, open GDS object, tidy data frame object, or a tidy data
   frame in wide or long format in the working directory. For GDS input,
-  individual metadata stored in the GDS supplies the codeSTRATA column.
+  individual metadata stored in the GDS supplies the `STRATA` column.
   *How to get a tidy data frame ?* Look into genometranslator
   [`tidy_genome`](https://thierrygosselin.github.io/genometranslator/reference/tidy_genome.md).
 

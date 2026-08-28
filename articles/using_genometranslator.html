@@ -290,6 +290,41 @@ GWH-TAS-2025-002  TAS</code></pre>
 <p>The function returns an open SeqArray GDS object. The GDS
 representation avoids materializing a very large genotype table in
 memory and is the preferred format for subsequent work in R.</p>
+<div class="section level3">
+<h3 id="preserve-how-variants-were-generated">Preserve how variants were generated<a class="anchor" aria-label="anchor" href="#preserve-how-variants-were-generated"></a>
+</h3>
+<p><code><a href="../reference/read_vcf.html">read_vcf()</a></code> stores a provenance table in the GDS
+metadata. It records the original path, size, modification time, MD5
+checksum, import time, detected caller, exact VCF source value, imported
+INFO and FORMAT fields, and available reference, contig, version, and
+command header lines. Keep the original VCF and its workflow files as
+well: provenance stored in GDS supports interpretation, but it is not a
+replacement for a maintained variant-calling pipeline.</p>
+<p>This matters when a genome-scan peak, missingness pattern, or local
+PCA signal is restricted to one caller, mapping strategy, sequencing
+batch, or reference assembly. Such a pattern can be biological,
+technical, or both.</p>
+</div>
+<div class="section level3">
+<h3 id="structural-variants-are-not-ordinary-snp-dosages">Structural variants are not ordinary SNP dosages<a class="anchor" aria-label="anchor" href="#structural-variants-are-not-ordinary-snp-dosages"></a>
+</h3>
+<p>When present, common annotations such as <code>SVTYPE</code>,
+<code>END</code>, <code>SVLEN</code>, <code>CIPOS</code>,
+<code>CIEND</code>, <code>MATEID</code>, and <code>EVENT</code> are
+preserved during VCF import. This is the first step toward fuller
+structural-variant support. Structural variants can have uncertain
+breakpoints, symbolic ALT alleles, breakends, copy number, and several
+forms of read support, so they should not all be forced into the SNP
+<code>ALT_DOSAGE</code> representation.</p>
+<p>Until a dedicated structural-variant representation is complete, keep
+these annotations and the source VCF, and describe local signals
+cautiously. A local PCA or LD haploblock may be consistent with a
+candidate inversion, but it may also reflect a centromere, low
+recombination, assembly or mapping problems, introgression,
+population-specific missingness, or another structural variant. Use
+“candidate”, “putative”, or “inversion-associated haploblock” until
+physical evidence supports a more specific structural
+interpretation.</p>
 <p>VCF files that are not ready for parallel access may need to be
 sorted, bgzip-compressed, and indexed. These preparation steps can
 require the optional <code>bcftools</code> executable. Check its
@@ -304,6 +339,7 @@ needed:</p>
 <span>  data <span class="op">=</span> <span class="va">shark</span>,</span>
 <span>  parallel.core <span class="op">=</span> <span class="fl">8</span></span>
 <span><span class="op">)</span></span></code></pre></div>
+</div>
 </div>
 <div class="section level2">
 <h2 id="reading-dart-files">Reading DArT files<a class="anchor" aria-label="anchor" href="#reading-dart-files"></a>

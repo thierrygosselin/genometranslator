@@ -61,17 +61,17 @@ check_header_source_vcf(vcf, markers.info = NULL, vcf.metadata = NULL)
 
 A list with:
 
-- `data.source` – inferred caller (e.g. "bcftools", "freebayes", …);
+- `data.source` - inferred caller (e.g. "bcftools", "freebayes", etc.);
 
-- `vcf.source.raw` – exact raw `##source=` string or `NA`;
+- `vcf.source.raw` - exact raw `##source=` string or `NA`;
 
-- `stacks.check` – whether this is a Stacks VCF (TRUE/FALSE);
+- `stacks.check` - whether this is a Stacks VCF (TRUE/FALSE);
 
-- `check.header` – cleaned
+- `check.header` - cleaned
   [`SeqArray::seqVCF_Header()`](https://rdrr.io/pkg/SeqArray/man/seqVCF_Header.html)
   object;
 
-- `markers.info` – final INFO fields to import (or `NULL` = all);
+- `markers.info` - final INFO fields to import (or `NULL` = all);
 
-- `overwrite.metadata` – final FORMAT fields to import (or `NULL` =
+- `overwrite.metadata` - final FORMAT fields to import (or `NULL` =
   all).

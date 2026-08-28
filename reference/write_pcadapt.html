@@ -7,7 +7,13 @@ genometranslator
 and might be of interest for users.
 Prepare an appropriately filtered biallelic dataset before export. Consider
 missingness, minor-allele frequency, linkage disequilibrium, and the sampling
-design intended for the pcadapt analysis."><meta property="og:description" content="Write a
+design intended for the pcadapt analysis.
+pcadapt candidates should be interpreted as loci unusually associated with
+inferred population structure, not as confirmed targets of selection. Use
+false-discovery-rate control on the p-values produced by pcadapt, for example
+with the Bioconductor qvalue package, and state the chosen q-value
+threshold. A threshold of 0.05 is common for candidate discovery; 0.01 is a
+more conservative option when false positives are costly."><meta property="og:description" content="Write a
 pcadapt
 file from a tidy data frame. The data is biallelic.
 Used internally in
@@ -15,7 +21,13 @@ genometranslator
 and might be of interest for users.
 Prepare an appropriately filtered biallelic dataset before export. Consider
 missingness, minor-allele frequency, linkage disequilibrium, and the sampling
-design intended for the pcadapt analysis."><meta property="og:image" content="https://thierrygosselin.github.io/genometranslator/logo.png"></head><body>
+design intended for the pcadapt analysis.
+pcadapt candidates should be interpreted as loci unusually associated with
+inferred population structure, not as confirmed targets of selection. Use
+false-discovery-rate control on the p-values produced by pcadapt, for example
+with the Bioconductor qvalue package, and state the chosen q-value
+threshold. A threshold of 0.05 is common for candidate discovery; 0.01 is a
+more conservative option when false positives are costly."><meta property="og:image" content="https://thierrygosselin.github.io/genometranslator/logo.png"></head><body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
 
@@ -58,6 +70,12 @@ and might be of interest for users.</p>
 <p>Prepare an appropriately filtered biallelic dataset before export. Consider
 missingness, minor-allele frequency, linkage disequilibrium, and the sampling
 design intended for the pcadapt analysis.</p>
+<p>pcadapt candidates should be interpreted as loci unusually associated with
+inferred population structure, not as confirmed targets of selection. Use
+false-discovery-rate control on the p-values produced by pcadapt, for example
+with the Bioconductor <span class="pkg">qvalue</span> package, and state the chosen q-value
+threshold. A threshold of 0.05 is common for candidate discovery; 0.01 is a
+more conservative option when false positives are costly.</p>
     </div>
 
     <div class="section level2">
@@ -118,7 +136,41 @@ removing SNPs on the same RADseq locus (short linkage disequilibrium).</p></li>
 Filter using Count, Frequency or Depth.</p></li>
 <li><p><strong>Only use markers that are in common between strata</strong></p></li>
 <li><p><strong>Only use polymorphic markers</strong></p></li>
-</ol></div>
+</ol><p><strong>Use complementary genome scans</strong>:
+No single genome-scan method is robust to every demographic history,
+sampling design, or genetic architecture. Compare pcadapt with methods based
+on different assumptions when possible. For example,
+<a href="https://thierrygosselin.github.io/radr/reference/run_bayescan.html" class="external-link">radr::run_bayescan()</a>
+implements a population-based FST outlier scan, whereas pcadapt models
+individual genotypes through principal components without requiring
+predefined populations. Environmental-association and haplotype-aware
+approaches can add complementary evidence when the study design supports
+them.</p>
+<p>Published method comparisons must be interpreted within their evaluation
+scenarios. The BayeScan false-discovery and admixture results reported by
+Luu et al. (2017), for example, were obtained from simulations and are not a
+universal ranking of the methods. Whole-genome analyses by Meisner et al.
+(2021) also showed that pcadapt statistics can be inflated under discrete
+population structure and when principal components reflect sequencing or
+genotype-calling artefacts. Inspect the PCA, QQ plots, genomic inflation,
+sample provenance, and technical covariates before interpreting candidates.</p>
+<p>Agreement among methods can increase confidence, but a strict intersection
+is not automatically the best candidate set because the methods detect
+different signals and have different failure modes. Report method-specific
+results, examine sensitivity to filtering, linkage, the number of principal
+components, missingness, and sampling, and validate important candidates
+using independent data or study-specific simulations.</p>
+<p><strong>Candidate inversions and structural regions:</strong>
+A large inversion-associated or low-recombination haploblock can dominate a
+principal component and consequently dominate a pcadapt scan. Compare the
+complete genome, a collinear sensitivity dataset excluding candidate
+regions, and an inversion-specific analysis. A local PCA signal may also
+reflect a centromere, assembly or mapping problem, introgression,
+population-specific missingness, or another structural variant. Because
+genometranslator does not depend on radr, candidate screening and genomic
+context are documented at
+<a href="https://thierrygosselin.github.io/radr/articles/detecting_inversions.html" class="external-link">radr's inversion vignette</a>.</p>
+    </div>
     <div class="section level2">
     <h2 id="data-filtering">Data filtering<a class="anchor" aria-label="anchor" href="#data-filtering"></a></h2>
 
@@ -145,10 +197,24 @@ packages, optional packages, and external executables.</p>
     <h2 id="references">References<a class="anchor" aria-label="anchor" href="#references"></a></h2>
     <p>Luu, K., Bazin, E., &amp; Blum, M. G. (2017).
 pcadapt: an R package to perform genome scans for selection based on principal component analysis.
-Molecular Ecology Resources, 17(1), 67-77.</p>
+Molecular Ecology Resources, 17(1), 67-77.
+<a href="https://doi.org/10.1111/1755-0998.12592" class="external-link">doi:10.1111/1755-0998.12592</a></p>
 <p>Duforet-Frebourg, N., Luu, K., Laval, G., Bazin, E., &amp; Blum, M. G. (2015).
 Detecting genomic signatures of natural selection with principal component analysis: application to the 1000 Genomes data.
-Molecular biology and evolution, msv334.</p>
+Molecular biology and evolution, msv334.
+<a href="https://doi.org/10.1093/molbev/msv334" class="external-link">doi:10.1093/molbev/msv334</a></p>
+<p>de Villemereuil, P., Frichot, E., Bazin, E., Francois, O., &amp;
+Gaggiotti, O. E. (2014). Genome scan methods against more complex models:
+when and how much should we trust them? Molecular Ecology, 23, 2006-2019.
+<a href="https://doi.org/10.1111/mec.12705" class="external-link">doi:10.1111/mec.12705</a></p>
+<p>Lotterhos, K. E., &amp; Whitlock, M. C. (2014). Evaluation of
+demographic history and neutral parameterization on the performance of FST
+outlier tests. Molecular Ecology, 23, 2178-2192.
+<a href="https://doi.org/10.1111/mec.12725" class="external-link">doi:10.1111/mec.12725</a></p>
+<p>Meisner, J., Albrechtsen, A., &amp; Hanghoj, K. (2021). Detecting
+selection in low-coverage high-throughput sequencing data using principal
+component analysis. BMC Bioinformatics, 22, 470.
+<a href="https://doi.org/10.1186/s12859-021-04375-2" class="external-link">doi:10.1186/s12859-021-04375-2</a></p>
     </div>
     <div class="section level2">
     <h2 id="author">Author<a class="anchor" aria-label="anchor" href="#author"></a></h2>

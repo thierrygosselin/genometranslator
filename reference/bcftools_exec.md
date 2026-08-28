@@ -59,8 +59,8 @@ bcftools_exec(
 
 Invisibly returns a list with:
 
-- `status` – exit status (integer),
+- `status` - exit status (integer),
 
-- `stdout` – character scalar with STDOUT,
+- `stdout` - character scalar with STDOUT,
 
-- `stderr` – character scalar with STDERR.
+- `stderr` - character scalar with STDERR.

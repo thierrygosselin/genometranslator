@@ -5,13 +5,13 @@ SeqArray GDS object
 /metadata node containing genome-specific metadata.
 The function has an "advanced" mode (via ...) that allows several
 VCF-specific clean-ups.
-For users who want a fast and robust VCF → GDS import.'><meta property="og:description" content='Read a VCF file and convert it to a
+For users who want a fast and robust VCF-to-GDS import.'><meta property="og:description" content='Read a VCF file and convert it to a
 SeqArray GDS object
 (SeqVarGDSClass; Zheng et al. 2017), with a
 /metadata node containing genome-specific metadata.
 The function has an "advanced" mode (via ...) that allows several
 VCF-specific clean-ups.
-For users who want a fast and robust VCF → GDS import.'><meta property="og:image" content="https://thierrygosselin.github.io/genometranslator/logo.png"></head><body>
+For users who want a fast and robust VCF-to-GDS import.'><meta property="og:image" content="https://thierrygosselin.github.io/genometranslator/logo.png"></head><body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
 
@@ -51,7 +51,7 @@ For users who want a fast and robust VCF → GDS import.'><meta property="og:ima
 <code>/metadata</code> node containing genome-specific metadata.</p>
 <p>The function has an "advanced" mode (via <code>...</code>) that allows several
 VCF-specific clean-ups.</p>
-<p>For users who want a fast and robust VCF → GDS import.</p>
+<p>For users who want a fast and robust VCF-to-GDS import.</p>
     </div>
 
     <div class="section level2">
@@ -140,6 +140,24 @@ section of the package README and check visibility with
 <code>Sys.which("bcftools")</code>.</p>
     </div>
     <div class="section level2">
+    <h2 id="provenance-and-structural-variants">Provenance and structural variants<a class="anchor" aria-label="anchor" href="#provenance-and-structural-variants"></a></h2>
+
+
+<p>The GDS records a VCF provenance table containing the original file path,
+size, modification time, MD5 checksum, import time, inferred caller, exact
+<code>##source</code> value, imported INFO and FORMAT fields, and available reference,
+contig, command, and version header lines. This information helps distinguish
+biological regional signals from caller, mapper, reference-build, batch, or
+processing effects.</p>
+<p>Common structural-variant INFO fields, including <code>SVTYPE</code>, <code>END</code>, <code>SVLEN</code>,
+<code>CIPOS</code>, <code>CIEND</code>, <code>MATEID</code>, and <code>EVENT</code>, are retained when present. Their
+presence does not make a biallelic dosage an adequate representation of a
+structural variant. Structural variants and candidate inversion-associated
+haploblocks should be annotated and interpreted explicitly. A local genomic
+signal should be called a candidate or putative inversion only until physical
+breakpoint, mapping, assembly, linkage, or cytogenetic evidence supports it.</p>
+    </div>
+    <div class="section level2">
     <h2 id="vcf-file-format-behaviour">VCF file format behaviour<a class="anchor" aria-label="anchor" href="#vcf-file-format-behaviour"></a></h2>
 
 
@@ -169,9 +187,9 @@ using <code>"_"</code>, and <code>POS</code> is replaced by <code>COL</code>.</p
 
 
 
-<p>The <code>...</code> lets you pass many additional arguments used by radiator’s
+<p>The <code>...</code> lets you pass many additional arguments used by radiator's
 filtering framework, for example:</p><ul><li><p><code>blacklist.id</code>, <code>pop.select</code>, <code>pop.levels</code>, <code>pop.labels</code>;</p></li>
-<li><p><code>filter.strands</code> – handle duplicate SNPs on opposite strands;</p></li>
+<li><p><code>filter.strands</code> - handle duplicate SNPs on opposite strands;</p></li>
 <li><p><code>markers.info</code>, <code>vcf.metadata</code>;</p></li>
 <li><p><code>path.folder</code>, <code>random.seed</code>, <code>subsample.markers.stats</code>;</p></li>
 <li><p><code>filter.haplotype.format</code>, etc.</p></li>
@@ -182,7 +200,7 @@ filtering framework, for example:</p><ul><li><p><code>blacklist.id</code>, <code
 Levine D (2017). SeqArray – A storage-efficient high-performance data
 format for WGS variant calls. <em>Bioinformatics</em>.</p>
 <p>Danecek P, Auton A, Abecasis G et al. (2011) The variant call format and
-VCFtools. <em>Bioinformatics</em> 27:2156–2158.</p>
+VCFtools. <em>Bioinformatics</em> 27:2156-2158.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>

@@ -244,6 +244,40 @@ The function returns an open SeqArray GDS object. The GDS representation
 avoids materializing a very large genotype table in memory and is the
 preferred format for subsequent work in R.
 
+### Preserve how variants were generated
+
+[`read_vcf()`](https://thierrygosselin.github.io/genometranslator/reference/read_vcf.md)
+stores a provenance table in the GDS metadata. It records the original
+path, size, modification time, MD5 checksum, import time, detected
+caller, exact VCF source value, imported INFO and FORMAT fields, and
+available reference, contig, version, and command header lines. Keep the
+original VCF and its workflow files as well: provenance stored in GDS
+supports interpretation, but it is not a replacement for a maintained
+variant-calling pipeline.
+
+This matters when a genome-scan peak, missingness pattern, or local PCA
+signal is restricted to one caller, mapping strategy, sequencing batch,
+or reference assembly. Such a pattern can be biological, technical, or
+both.
+
+### Structural variants are not ordinary SNP dosages
+
+When present, common annotations such as `SVTYPE`, `END`, `SVLEN`,
+`CIPOS`, `CIEND`, `MATEID`, and `EVENT` are preserved during VCF import.
+This is the first step toward fuller structural-variant support.
+Structural variants can have uncertain breakpoints, symbolic ALT
+alleles, breakends, copy number, and several forms of read support, so
+they should not all be forced into the SNP `ALT_DOSAGE` representation.
+
+Until a dedicated structural-variant representation is complete, keep
+these annotations and the source VCF, and describe local signals
+cautiously. A local PCA or LD haploblock may be consistent with a
+candidate inversion, but it may also reflect a centromere, low
+recombination, assembly or mapping problems, introgression,
+population-specific missingness, or another structural variant. Use
+“candidate”, “putative”, or “inversion-associated haploblock” until
+physical evidence supports a more specific structural interpretation.
+
 VCF files that are not ready for parallel access may need to be sorted,
 bgzip-compressed, and indexed. These preparation steps can require the
 optional `bcftools` executable. Check its visibility with:

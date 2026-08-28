@@ -58,6 +58,6 @@ filter_haplotype_format(
 
 A list with:
 
-- `markers.meta` – updated markers metadata tibble;
+- `markers.meta` - updated markers metadata tibble;
 
-- `filters.parameters` – updated filter-parameter object.
+- `filters.parameters` - updated filter-parameter object.

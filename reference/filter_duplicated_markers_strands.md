@@ -46,11 +46,11 @@ filter_duplicated_markers_strands(
 
   (character) Strategy to handle duplicated strands:
 
-  - `"keep.both"` – detect but do not filter;
+  - `"keep.both"` - detect but do not filter;
 
-  - `"blacklist"` – blacklist all duplicated markers;
+  - `"blacklist"` - blacklist all duplicated markers;
 
-  - `"best.stats"` – select markers based on missingness and MAC (see
+  - `"best.stats"` - select markers based on missingness and MAC (see
     details in code) and blacklist them (current behaviour).
 
   Default: `filter.strands = c("keep.both", "blacklist", "best.stats")`.

@@ -8,7 +8,7 @@ containing genome-specific metadata.
 The function has an "advanced" mode (via `...`) that allows several
 VCF-specific clean-ups.
 
-For users who want a fast and robust VCF → GDS import.
+For users who want a fast and robust VCF-to-GDS import.
 
 ## Usage
 
@@ -95,6 +95,24 @@ Rsamtools. VCF preparation and indexing may also require the optional
 `bcftools` executable. See the installation section of the package
 README and check visibility with `Sys.which("bcftools")`.
 
+## Provenance and structural variants
+
+The GDS records a VCF provenance table containing the original file
+path, size, modification time, MD5 checksum, import time, inferred
+caller, exact `##source` value, imported INFO and FORMAT fields, and
+available reference, contig, command, and version header lines. This
+information helps distinguish biological regional signals from caller,
+mapper, reference-build, batch, or processing effects.
+
+Common structural-variant INFO fields, including `SVTYPE`, `END`,
+`SVLEN`, `CIPOS`, `CIEND`, `MATEID`, and `EVENT`, are retained when
+present. Their presence does not make a biallelic dosage an adequate
+representation of a structural variant. Structural variants and
+candidate inversion-associated haploblocks should be annotated and
+interpreted explicitly. A local genomic signal should be called a
+candidate or putative inversion only until physical breakpoint, mapping,
+assembly, linkage, or cytogenetic evidence supports it.
+
 ## VCF file format behaviour
 
 **PLINK:**
@@ -137,12 +155,12 @@ README and check visibility with `Sys.which("bcftools")`.
 
 ## Advanced mode (`...`)
 
-The `...` lets you pass many additional arguments used by radiator’s
+The `...` lets you pass many additional arguments used by radiator's
 filtering framework, for example:
 
 - `blacklist.id`, `pop.select`, `pop.levels`, `pop.labels`;
 
-- `filter.strands` – handle duplicate SNPs on opposite strands;
+- `filter.strands` - handle duplicate SNPs on opposite strands;
 
 - `markers.info`, `vcf.metadata`;
 
@@ -157,7 +175,7 @@ Levine D (2017). SeqArray – A storage-efficient high-performance data
 format for WGS variant calls. *Bioinformatics*.
 
 Danecek P, Auton A, Abecasis G et al. (2011) The variant call format and
-VCFtools. *Bioinformatics* 27:2156–2158.
+VCFtools. *Bioinformatics* 27:2156-2158.
 
 ## See also
 
