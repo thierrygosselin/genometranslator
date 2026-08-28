@@ -1444,15 +1444,6 @@ check_coverage <- function(gds, genotypes.metadata.check = FALSE, stacks.haplo.c
 
   if (stacks.haplo.check) {
     biallelic <- detect_biallelic_markers(data = gds)
-    biallelic <- gdsfmt::read.gdsn(gdsfmt::index.gdsn(
-      node = gds,
-      path = genome_metadata_path(gds, "biallelic"),
-      silent = TRUE
-    ))
-    if (!biallelic) {
-      # check again to be 100% sure...
-      biallelic <- detect_biallelic_markers(data = gds)
-    }
     if (!biallelic && stringi::stri_detect_fixed(str = data.source, pattern = "Stacks"))  got.coverage <- NULL
   }
 
@@ -2996,12 +2987,7 @@ generate_stats <- function(
   if (snp.per.locus) {
     if (verbose) cli::cli_progress_step("SNPs per locus")
     if (!rlang::has_name(m.info, "SNP_PER_LOCUS") || force.stats) {
-      biallelic <- gdsfmt::read.gdsn(gdsfmt::index.gdsn(
-        node = gds,
-        path = genome_metadata_path(gds, "biallelic"),
-        silent = TRUE
-      ))
-      if (!is.logical(biallelic)) biallelic <- FALSE
+      biallelic <- detect_biallelic_markers(data = gds)
       if (biallelic) {
         m.info %<>%
           dplyr::group_by(LOCUS) %>%

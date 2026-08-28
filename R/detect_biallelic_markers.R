@@ -56,25 +56,27 @@ detect_biallelic_markers <- function(data, verbose = FALSE, parallel.core = para
       path = genome_metadata_path(data, child = "biallelic"),
       silent = TRUE
     )
-    biallelic <- if (is.null(biallelic.node)) NULL else gdsfmt::read.gdsn(biallelic.node)
+    # The metadata skeleton contains an empty placeholder until the value has
+    # been determined. Empty GDS labels and folders do not have a data field
+    # and therefore must not be passed to read.gdsn().
+    biallelic <- NULL
+    if (!is.null(biallelic.node)) {
+      node.description <- gdsfmt::objdesp.gdsn(biallelic.node)
+      if (nzchar(node.description$storage)) {
+        biallelic <- gdsfmt::read.gdsn(biallelic.node)
+      }
+      node.description <- NULL
+    }
     if (!is.logical(biallelic) || length(biallelic) != 1L) biallelic <- NULL
 
     if (is.null(biallelic)) {
-      safe_ref <- purrr::safely(.f = SeqArray::seqGetData)
-      ref.safe <- safe_ref(gdsfile = data, var.name = "$ref")
-      if (is.null(ref.safe$error)) {
-        ref <- ref.safe$result
-        sample.size <- min(length(unique(ref)), 100)
-        biallelic <- max(unique(stringi::stri_count_regex(
-          str = sample(
-            x = unique(ref),
-            size = sample.size), pattern = "[A-Z]"))) == 1
-        sample.size <- ref <- NULL
-      } else {
-        biallelic <- FALSE
-        ref <- max(SeqArray::seqGetData(gdsfile = data, var.name = "$num_allele"))
-        if (ref == 2L) biallelic <- TRUE
-      }
+      num.alleles <- SeqArray::seqGetData(
+        gdsfile = data,
+        var.name = "$num_allele"
+      )
+      biallelic <- length(num.alleles) > 0L &&
+        all(num.alleles == 2L, na.rm = TRUE)
+      num.alleles <- NULL
 
     }
 

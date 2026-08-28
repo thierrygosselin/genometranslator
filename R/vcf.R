@@ -631,6 +631,11 @@ read_vcf <- function(
 
   # Bi- vs multi-allelic -------------------------------------------------------
   biallelic <- detect_biallelic_markers(data = gds, verbose = verbose)
+  update_genome_gds(
+    gds       = gds,
+    node.name = "biallelic",
+    value     = biallelic
+  )
 
   # radiator_parameters: generate + initiate -----------------------------------
   filters.parameters <- genome_parameters(
@@ -712,7 +717,19 @@ if (verbose) message("VCF-specific filters")
   haplo.out          <- NULL
 
   if (isTRUE(filter.haplotype.format)) {
+    # Filtering may have removed every multiallelic variant. Clear the cached
+    # value so it is inferred again from the active variants.
+    update_genome_gds(
+      gds       = gds,
+      node.name = "biallelic",
+      value     = NULL
+    )
     biallelic <- detect_biallelic_markers(data = gds, verbose = verbose)
+    update_genome_gds(
+      gds       = gds,
+      node.name = "biallelic",
+      value     = biallelic
+    )
   }
 
   if (!biallelic && stacks.checks) {
