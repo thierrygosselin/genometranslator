@@ -17,7 +17,7 @@ write_bayescan(
 \arguments{
 \item{data}{A GDS file, open GDS object, tidy data frame object, or a tidy
 data frame in wide or long format in the working directory. For GDS input,
-individual metadata stored in the GDS supplies the code{STRATA} column.
+individual metadata stored in the GDS supplies the \code{STRATA} column.
 \emph{How to get a tidy data frame ?}
 Look into \pkg{genometranslator} \code{\link[genometranslator]{tidy_genome}}.}
 

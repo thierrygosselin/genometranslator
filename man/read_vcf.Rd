@@ -59,7 +59,7 @@ Read a VCF file and convert it to a
 The function has an "advanced" mode (via \code{...}) that allows several
 VCF-specific clean-ups.
 
-For users who want a fast and robust VCF → GDS import.
+For users who want a fast and robust VCF-to-GDS import.
 }
 \details{
 Typical performance (rough order of magnitude):
@@ -82,6 +82,24 @@ VCF import uses the declared Bioconductor packages \pkg{SeqArray},
 require the optional \command{bcftools} executable. See the installation
 section of the package README and check visibility with
 \code{Sys.which("bcftools")}.
+}
+
+\section{Provenance and structural variants}{
+
+The GDS records a VCF provenance table containing the original file path,
+size, modification time, MD5 checksum, import time, inferred caller, exact
+\verb{##source} value, imported INFO and FORMAT fields, and available reference,
+contig, command, and version header lines. This information helps distinguish
+biological regional signals from caller, mapper, reference-build, batch, or
+processing effects.
+
+Common structural-variant INFO fields, including \code{SVTYPE}, \code{END}, \code{SVLEN},
+\code{CIPOS}, \code{CIEND}, \code{MATEID}, and \code{EVENT}, are retained when present. Their
+presence does not make a biallelic dosage an adequate representation of a
+structural variant. Structural variants and candidate inversion-associated
+haploblocks should be annotated and interpreted explicitly. A local genomic
+signal should be called a candidate or putative inversion only until physical
+breakpoint, mapping, assembly, linkage, or cytogenetic evidence supports it.
 }
 
 \section{VCF file format behaviour}{
@@ -130,11 +148,11 @@ using \code{"_"}, and \code{POS} is replaced by \code{COL}.
 \section{Advanced mode (\code{...})}{
 
 
-The \code{...} lets you pass many additional arguments used by radiator’s
+The \code{...} lets you pass many additional arguments used by radiator's
 filtering framework, for example:
 \itemize{
 \item \code{blacklist.id}, \code{pop.select}, \code{pop.levels}, \code{pop.labels};
-\item \code{filter.strands} – handle duplicate SNPs on opposite strands;
+\item \code{filter.strands} - handle duplicate SNPs on opposite strands;
 \item \code{markers.info}, \code{vcf.metadata};
 \item \code{path.folder}, \code{random.seed}, \code{subsample.markers.stats};
 \item \code{filter.haplotype.format}, etc.
@@ -166,7 +184,7 @@ Levine D (2017). SeqArray -- A storage-efficient high-performance data
 format for WGS variant calls. \emph{Bioinformatics}.
 
 Danecek P, Auton A, Abecasis G et al. (2011) The variant call format and
-VCFtools. \emph{Bioinformatics} 27:2156–2158.
+VCFtools. \emph{Bioinformatics} 27:2156-2158.
 }
 \seealso{
 \code{\link{tidy_genome}},

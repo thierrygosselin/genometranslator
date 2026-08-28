@@ -54,6 +54,11 @@ install.packages("adegenet")
 See the documentation for the relevant `read_*` or `write_*` function for the
 exact dependency and data requirements of that format. 
 
+VCF imports retain caller and workflow provenance in GDS metadata and preserve
+common structural-variant annotations when they are present. See the
+[get-started vignette](articles/using_genometranslator.html) for the current
+scope and the roadmap toward a dedicated structural-variant representation.
+
 Run the dependency diagnostic after installation:
 
 ```{r dependency-check, eval=FALSE}

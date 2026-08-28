@@ -23,7 +23,7 @@
 #' The function has an "advanced" mode (via \code{...}) that allows several
 #' VCF-specific clean-ups.
 #'
-#' For users who want a fast and robust VCF → GDS import.
+#' For users who want a fast and robust VCF-to-GDS import.
 #'
 #'
 #' @param data (character)
@@ -66,6 +66,22 @@
 #'
 #' The resulting GDS file can be reopened almost instantly in a later R session
 #' with \code{genometranslator::read_genome()}. So it's worth waiting.
+#'
+#' @section Provenance and structural variants:
+#' The GDS records a VCF provenance table containing the original file path,
+#' size, modification time, MD5 checksum, import time, inferred caller, exact
+#' `##source` value, imported INFO and FORMAT fields, and available reference,
+#' contig, command, and version header lines. This information helps distinguish
+#' biological regional signals from caller, mapper, reference-build, batch, or
+#' processing effects.
+#'
+#' Common structural-variant INFO fields, including `SVTYPE`, `END`, `SVLEN`,
+#' `CIPOS`, `CIEND`, `MATEID`, and `EVENT`, are retained when present. Their
+#' presence does not make a biallelic dosage an adequate representation of a
+#' structural variant. Structural variants and candidate inversion-associated
+#' haploblocks should be annotated and interpreted explicitly. A local genomic
+#' signal should be called a candidate or putative inversion only until physical
+#' breakpoint, mapping, assembly, linkage, or cytogenetic evidence supports it.
 #'
 #'
 #' @section VCF file format behaviour:
@@ -111,11 +127,11 @@
 #'
 #' @section Advanced mode (\code{...}):
 #'
-#' The \code{...} lets you pass many additional arguments used by radiator’s
+#' The \code{...} lets you pass many additional arguments used by radiator's
 #' filtering framework, for example:
 #' \itemize{
 #'   \item \code{blacklist.id}, \code{pop.select}, \code{pop.levels}, \code{pop.labels};
-#'   \item \code{filter.strands} – handle duplicate SNPs on opposite strands;
+#'   \item \code{filter.strands} - handle duplicate SNPs on opposite strands;
 #'   \item \code{markers.info}, \code{vcf.metadata};
 #'   \item \code{path.folder}, \code{random.seed}, \code{subsample.markers.stats};
 #'   \item \code{filter.haplotype.format}, etc.
@@ -136,7 +152,7 @@
 #' format for WGS variant calls. *Bioinformatics*.
 #'
 #' Danecek P, Auton A, Abecasis G et al. (2011) The variant call format and
-#' VCFtools. *Bioinformatics* 27:2156–2158.
+#' VCFtools. *Bioinformatics* 27:2156-2158.
 #'
 #' @author Thierry Gosselin \email{thierrygosselin@@icloud.com}
 #'
@@ -348,7 +364,14 @@ read_vcf <- function(
   dp <- "DP" %in% check.header$format$ID # Check that DP is valid
   markers.info <- detect.source$markers.info
   overwrite.metadata <- detect.source$overwrite.metadata # may be NULL
-  # vcf.source.raw <- detect.source$vcf.source.raw # optional, if you want it later
+  vcf.provenance <- .vcf_provenance_table(
+    file = file.origin,
+    data.source = data.source,
+    source.raw = detect.source$vcf.source.raw,
+    header = check.header,
+    info.import = markers.info,
+    format.import = overwrite.metadata
+  )
 
   if (verbose) message("VCF source: ", data.source)
 
@@ -436,6 +459,7 @@ read_vcf <- function(
   # Track input file and source -----------------------------------------------
   update_genome_gds(gds = gds, node.name = "input.file",  value = file.origin)
   update_genome_gds(gds = gds, node.name = "data.source", value = data.source)
+  update_genome_gds(gds = gds, node.name = "vcf.provenance", value = vcf.provenance)
 
 
   # Sample IDs -----------------------------------------------------------------
@@ -2064,12 +2088,12 @@ extract_info_vcf <- function(vcf) {
 #' Default: \code{vcf.metadata = NULL}.
 #' @return A list with:
 #' \itemize{
-#'   \item \code{data.source} – inferred caller (e.g. "bcftools", "freebayes", …);
-#'   \item \code{vcf.source.raw} – exact raw \code{##source=} string or \code{NA};
-#'   \item \code{stacks.check} – whether this is a Stacks VCF (TRUE/FALSE);
-#'   \item \code{check.header} – cleaned \code{SeqArray::seqVCF_Header()} object;
-#'   \item \code{markers.info} – final INFO fields to import (or \code{NULL} = all);
-#'   \item \code{overwrite.metadata} – final FORMAT fields to import
+#'   \item \code{data.source} - inferred caller (e.g. "bcftools", "freebayes", etc.);
+#'   \item \code{vcf.source.raw} - exact raw \code{##source=} string or \code{NA};
+#'   \item \code{stacks.check} - whether this is a Stacks VCF (TRUE/FALSE);
+#'   \item \code{check.header} - cleaned \code{SeqArray::seqVCF_Header()} object;
+#'   \item \code{markers.info} - final INFO fields to import (or \code{NULL} = all);
+#'   \item \code{overwrite.metadata} - final FORMAT fields to import
 #'         (or \code{NULL} = all).
 #' }
 #'
@@ -2177,7 +2201,7 @@ check_header_source_vcf <- function(
   # special handling for freebayes_dirty
   if (identical(data.source, "freebayes_dirty")) {
     message(
-      "\nDetected freeBayes 'dirty' build — restricting FORMAT to GT/DP ",
+      "\nDetected freeBayes 'dirty' build - restricting FORMAT to GT/DP ",
       "and setting problematic INFO Number fields to '.'.\n"
     )
 
@@ -2250,7 +2274,7 @@ check_header_source_vcf <- function(
     default_info <- c("DP", "AC", "AN", "MQ", "QD")
 
   } else {
-    # unknown/other → import everything
+    # unknown/other: import everything
     default_fmt  <- NULL
     default_info <- NULL
   }
@@ -2292,6 +2316,18 @@ check_header_source_vcf <- function(
     }
   }
 
+  # Preserve common structural-variant descriptors regardless of caller-specific
+  # SNP defaults. These fields remain annotations; no structural variant is
+  # reduced automatically to an alternate-allele dosage.
+  sv.info <- intersect(
+    c("SVTYPE", "END", "SVLEN", "CIPOS", "CIEND", "IMPRECISE",
+      "MATEID", "EVENT"),
+    info.ids
+  )
+  if (length(sv.info) && !is.null(markers.info.import)) {
+    markers.info.import <- unique(c(markers.info.import, sv.info))
+  }
+
   list(
     data.source        = data.source,
     vcf.source.raw     = vcf.source.raw,
@@ -2301,6 +2337,48 @@ check_header_source_vcf <- function(
     overwrite.metadata = overwrite.metadata
   )
 } # END check_header_source_vcf
+
+.vcf_provenance_table <- function(
+    file, data.source, source.raw, header, info.import, format.import
+) {
+  file.info <- suppressWarnings(file.info(file))
+  checksum <- tryCatch(
+    unname(tools::md5sum(file)), error = function(e) NA_character_
+  )
+  header.table <- header$header
+  keep <- grepl(
+    "source|reference|contig|command|version|gatk|bcftools|stacks|freebayes",
+    tolower(header.table$id)
+  )
+  header.values <- if (any(keep)) {
+    paste(
+      paste0(header.table$id[keep], "=", header.table$value[keep]),
+      collapse = "\n"
+    )
+  } else {
+    NA_character_
+  }
+  tibble::tibble(
+    FIELD = c(
+      "input_file", "input_basename", "input_size_bytes", "input_mtime",
+      "input_md5", "imported_at", "detected_caller", "vcf_source_raw",
+      "info_fields_imported", "format_fields_imported", "header_provenance"
+    ),
+    VALUE = c(
+      normalizePath(file, mustWork = FALSE),
+      basename(file),
+      as.character(file.info$size[1L]),
+      as.character(file.info$mtime[1L]),
+      checksum,
+      format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"),
+      data.source,
+      source.raw,
+      if (is.null(info.import)) "all" else paste(info.import, collapse = ";"),
+      if (is.null(format.import)) "all" else paste(format.import, collapse = ";"),
+      header.values
+    )
+  )
+}
 
 
 # indexing_vcf -------------------------------------------------------
@@ -2822,9 +2900,9 @@ filter_vcf_filter_column <- function(
 #' @param file.date Character string used in filenames.
 #' @param filter.strands (character) Strategy to handle duplicated strands:
 #'   \itemize{
-#'     \item \code{"keep.both"} – detect but do not filter;
-#'     \item \code{"blacklist"} – blacklist all duplicated markers;
-#'     \item \code{"best.stats"} – select markers based on missingness and MAC
+#'     \item \code{"keep.both"} - detect but do not filter;
+#'     \item \code{"blacklist"} - blacklist all duplicated markers;
+#'     \item \code{"best.stats"} - select markers based on missingness and MAC
 #'       (see details in code) and blacklist them (current behaviour).
 #'   }
 #' Default: \code{filter.strands = c("keep.both", "blacklist", "best.stats")}.
@@ -2966,7 +3044,7 @@ filter_duplicated_markers_strands <- function(
     blacklist.strands %<>% dplyr::distinct(MARKERS)
   }
 
-  # If we’re here, we are blacklisting something -------------------------------
+  # If we are here, we are blacklisting something -----------------------------
   if (nrow(blacklist.strands) == 0L) {
     return(list(
       markers.meta       = markers.meta,
@@ -3115,8 +3193,8 @@ filter_duplicated_markers_strands <- function(
 #' @return
 #' A list with:
 #' \itemize{
-#'   \item \code{markers.meta} – updated markers metadata tibble;
-#'   \item \code{filters.parameters} – updated filter-parameter object.
+#'   \item \code{markers.meta} - updated markers metadata tibble;
+#'   \item \code{filters.parameters} - updated filter-parameter object.
 #' }
 #'
 #' @name filter_haplotype_format
@@ -3529,9 +3607,9 @@ bcftools_require <- function(bcftools.path = "bcftools") {
 #' @return
 #' Invisibly returns a list with:
 #' \itemize{
-#'   \item \code{status} – exit status (integer),
-#'   \item \code{stdout} – character scalar with STDOUT,
-#'   \item \code{stderr} – character scalar with STDERR.
+#'   \item \code{status} - exit status (integer),
+#'   \item \code{stdout} - character scalar with STDOUT,
+#'   \item \code{stderr} - character scalar with STDERR.
 #' }
 #' @export
 #' @keywords internal

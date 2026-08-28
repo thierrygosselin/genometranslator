@@ -33,12 +33,12 @@ Default: \code{vcf.metadata = NULL}.}
 \value{
 A list with:
 \itemize{
-\item \code{data.source} – inferred caller (e.g. "bcftools", "freebayes", …);
-\item \code{vcf.source.raw} – exact raw \code{##source=} string or \code{NA};
-\item \code{stacks.check} – whether this is a Stacks VCF (TRUE/FALSE);
-\item \code{check.header} – cleaned \code{SeqArray::seqVCF_Header()} object;
-\item \code{markers.info} – final INFO fields to import (or \code{NULL} = all);
-\item \code{overwrite.metadata} – final FORMAT fields to import
+\item \code{data.source} - inferred caller (e.g. "bcftools", "freebayes", etc.);
+\item \code{vcf.source.raw} - exact raw \code{##source=} string or \code{NA};
+\item \code{stacks.check} - whether this is a Stacks VCF (TRUE/FALSE);
+\item \code{check.header} - cleaned \code{SeqArray::seqVCF_Header()} object;
+\item \code{markers.info} - final INFO fields to import (or \code{NULL} = all);
+\item \code{overwrite.metadata} - final FORMAT fields to import
 (or \code{NULL} = all).
 }
 }

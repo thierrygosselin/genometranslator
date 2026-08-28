@@ -31,9 +31,9 @@ filter_duplicated_markers_strands(
 
 \item{filter.strands}{(character) Strategy to handle duplicated strands:
 \itemize{
-\item \code{"keep.both"} – detect but do not filter;
-\item \code{"blacklist"} – blacklist all duplicated markers;
-\item \code{"best.stats"} – select markers based on missingness and MAC
+\item \code{"keep.both"} - detect but do not filter;
+\item \code{"blacklist"} - blacklist all duplicated markers;
+\item \code{"best.stats"} - select markers based on missingness and MAC
 (see details in code) and blacklist them (current behaviour).
 }
 Default: \code{filter.strands = c("keep.both", "blacklist", "best.stats")}.}

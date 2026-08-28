@@ -43,8 +43,8 @@ Default: \code{verbose = TRUE}.}
 \value{
 A list with:
 \itemize{
-\item \code{markers.meta} – updated markers metadata tibble;
-\item \code{filters.parameters} – updated filter-parameter object.
+\item \code{markers.meta} - updated markers metadata tibble;
+\item \code{filters.parameters} - updated filter-parameter object.
 }
 }
 \description{

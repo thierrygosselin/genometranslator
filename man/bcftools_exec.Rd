@@ -36,9 +36,9 @@ Default: \code{fail_on_status = TRUE}.}
 \value{
 Invisibly returns a list with:
 \itemize{
-\item \code{status} – exit status (integer),
-\item \code{stdout} – character scalar with STDOUT,
-\item \code{stderr} – character scalar with STDERR.
+\item \code{status} - exit status (integer),
+\item \code{stdout} - character scalar with STDOUT,
+\item \code{stderr} - character scalar with STDERR.
 }
 }
 \description{
