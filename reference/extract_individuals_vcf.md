@@ -2,7 +2,9 @@
 
 Function that returns the individuals present in a vcf file. Useful to
 create a strata file or to make sure you have the right individuals in
-your VCF.
+your VCF. Only the VCF header and first variant record are read;
+variants are not counted or imported. The fixed VCF columns and record
+width are validated before sample IDs are returned.
 
 ## Usage
 

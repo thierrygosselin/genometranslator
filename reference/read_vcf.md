@@ -155,8 +155,8 @@ assembly, linkage, or cytogenetic evidence supports it.
 
 ## Advanced mode (`...`)
 
-The `...` lets you pass many additional arguments used by radiator's
-filtering framework, for example:
+The `...` provides import and output controls that are intentionally
+kept outside the basic interface:
 
 - `blacklist.id`, `pop.select`, `pop.levels`, `pop.labels`;
 
@@ -166,7 +166,7 @@ filtering framework, for example:
 
 - `path.folder`, `random.seed`, `subsample.markers.stats`;
 
-- `filter.haplotype.format`, etc.
+- `filter.haplotype.format`, `parameters`, `internal`.
 
 ## References
 
