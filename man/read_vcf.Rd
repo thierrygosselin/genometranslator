@@ -148,14 +148,14 @@ using \code{"_"}, and \code{POS} is replaced by \code{COL}.
 \section{Advanced mode (\code{...})}{
 
 
-The \code{...} lets you pass many additional arguments used by radiator's
-filtering framework, for example:
+The \code{...} provides import and output controls that are intentionally
+kept outside the basic interface:
 \itemize{
 \item \code{blacklist.id}, \code{pop.select}, \code{pop.levels}, \code{pop.labels};
 \item \code{filter.strands} - handle duplicate SNPs on opposite strands;
 \item \code{markers.info}, \code{vcf.metadata};
 \item \code{path.folder}, \code{random.seed}, \code{subsample.markers.stats};
-\item \code{filter.haplotype.format}, etc.
+\item \code{filter.haplotype.format}, \code{parameters}, \code{internal}.
 }
 }
 

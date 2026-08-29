@@ -127,14 +127,14 @@
 #'
 #' @section Advanced mode (\code{...}):
 #'
-#' The \code{...} lets you pass many additional arguments used by radiator's
-#' filtering framework, for example:
+#' The \code{...} provides import and output controls that are intentionally
+#' kept outside the basic interface:
 #' \itemize{
 #'   \item \code{blacklist.id}, \code{pop.select}, \code{pop.levels}, \code{pop.labels};
 #'   \item \code{filter.strands} - handle duplicate SNPs on opposite strands;
 #'   \item \code{markers.info}, \code{vcf.metadata};
 #'   \item \code{path.folder}, \code{random.seed}, \code{subsample.markers.stats};
-#'   \item \code{filter.haplotype.format}, etc.
+#'   \item \code{filter.haplotype.format}, \code{parameters}, \code{internal}.
 #' }
 #'
 #' @return
@@ -196,7 +196,9 @@ read_vcf <- function(
   res <- list()
 
   # Required package ----------------------------------------------------------
-  tgbase::check_package(package = "SeqArray", cran = FALSE, bioc = TRUE)
+  suppressMessages(
+    tgbase::check_package(package = "SeqArray", cran = FALSE, bioc = TRUE)
+  )
 
   # Checking for missing arguments --------------------------------------------
   if (missing(data)) {
@@ -302,7 +304,7 @@ read_vcf <- function(
   tgbase::write_tgbase_tsv(
     data          = rad.dots,
     path.folder   = path.folder,
-    filename      = "radiator_read_vcf_args",
+    filename      = "genometranslator_read_vcf_args",
     date          = TRUE,
     internal      = internal,
     write.message = "Function call and arguments stored in: ",
@@ -503,6 +505,10 @@ read_vcf <- function(
   individuals.vcf <- NULL
 
   # Strata handling -----------------------------------------------------------
+  # This remains FALSE when no strata file is supplied. Previously it was
+  # created only inside the non-NULL strata branch but consulted later during
+  # output writing, which made the default read_vcf(data = ...) workflow fail.
+  missing.samples <- FALSE
   strata <- genometranslator::read_strata(
     strata      = strata,
     pop.levels  = pop.levels,
@@ -541,7 +547,6 @@ read_vcf <- function(
       }
     }
 
-    missing.samples <- FALSE
     if (nrow(check.strata) != 0) {
       if (verbose) {
         cli::cli_alert_info("    Number of sample in strata but not in data: {nrow(check.strata)}")
@@ -1654,16 +1659,8 @@ tidy_vcf <- function(
 #' @export
 dots_keepers_read_vcf <- function(extra = NULL, exclude = NULL) {
   base <- c(
-    dots_keepers_core(),
-    # explicitly used inside read_vcf():
-    "whitelist.markers",
-    "filter.ma", "filter.snp.position.read", "filter.snp.number",
-    "filter.coverage", "filter.genotyping", "filter.short.ld",
-    "filter.long.ld", "long.ld.missing", "ld.method",
-    "filter.individuals.missing", "filter.individuals.coverage.total",
-    "filter.individuals.coverage.median",
-    "filter.individuals.coverage.iqr",
-    "filter.common.markers", "filter.monomorphic",
+    # Arguments explicitly consumed inside read_vcf(). Importing and format
+    # validation belong here; general genomic filtering belongs in radr.
     "filter.strands", "filter.haplotype.format",
     "blacklist.id", "pop.select", "pop.levels", "pop.labels",
     "path.folder",
@@ -1671,9 +1668,6 @@ dots_keepers_read_vcf <- function(extra = NULL, exclude = NULL) {
     "subsample.markers.stats",
     "parameters", "random.seed", "internal"
   )
-  # read_vcf has vcf.stats as a formal arg; prevent .../parameters from overriding it
-  base <- setdiff(base, "vcf.stats")
-
   if (!is.null(extra)) {
     base <- c(base, extra)
   }
@@ -2023,7 +2017,10 @@ write_vcf <- function(
 #' @title Extract individuals from vcf file
 #' @description Function that returns the individuals present in a vcf file.
 #' Useful to create a strata file or
-#' to make sure you have the right individuals in your VCF.
+#' to make sure you have the right individuals in your VCF. Only the VCF header
+#' and first variant record are read; variants are not counted or imported. The
+#' fixed VCF columns and record width are validated before sample IDs are
+#' returned.
 #' @param vcf (character, path) The path to the vcf file.
 #' @rdname extract_individuals_vcf
 #' @export
@@ -2040,8 +2037,75 @@ write_vcf <- function(
 #' }
 
 extract_individuals_vcf <- function(vcf) {
+  if (!is.character(vcf) || length(vcf) != 1L || !file.exists(vcf)) {
+    rlang::abort("`vcf` must be the path to an existing VCF file.")
+  }
+  connection <- if (grepl("\\.gz$", vcf, ignore.case = TRUE)) {
+    gzfile(vcf, open = "rt")
+  } else {
+    file(vcf, open = "rt")
+  }
+  on.exit(close(connection), add = TRUE)
+  chrom.header <- NULL
+  first.record <- NULL
+  repeat {
+    lines <- readLines(connection, n = 1000L, warn = FALSE)
+    if (!length(lines)) break
+    candidate.lines <- lines
+    if (is.null(chrom.header)) {
+      hit <- which(startsWith(lines, "#CHROM"))
+      if (!length(hit)) next
+      header.index <- hit[[1]]
+      chrom.header <- lines[[header.index]]
+      candidate.lines <- if (header.index < length(lines)) {
+        lines[(header.index + 1L):length(lines)]
+      } else {
+        character()
+      }
+    }
+    candidate.lines <- candidate.lines[
+      nzchar(candidate.lines) & !startsWith(candidate.lines, "#")
+    ]
+    if (length(candidate.lines)) {
+      first.record <- candidate.lines[[1]]
+      break
+    }
+  }
+  if (is.null(chrom.header)) {
+    rlang::abort("The VCF `#CHROM` header line could not be found.")
+  }
+  fields <- strsplit(chrom.header, "\t", fixed = TRUE)[[1]]
+  fixed.fields <- c("#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO")
+  if (length(fields) < 8L || !identical(fields[seq_along(fixed.fields)], fixed.fields)) {
+    rlang::abort(paste0(
+      "The VCF `#CHROM` header does not contain the eight required fixed ",
+      "columns in their standard order."
+    ))
+  }
+  if (length(fields) > 8L && fields[[9]] != "FORMAT") {
+    rlang::abort(paste0(
+      "Unexpected ninth VCF column `", fields[[9]], "`; `FORMAT` is required ",
+      "before sample columns."
+    ))
+  }
+  if (!is.null(first.record)) {
+    record.width <- length(strsplit(first.record, "\t", fixed = TRUE)[[1]])
+    if (record.width != length(fields)) {
+      rlang::abort(paste0(
+        "The VCF header contains ", length(fields), " columns but the first ",
+        "variant record contains ", record.width, ". The file may be malformed."
+      ))
+    }
+  }
+  sample.id <- if (length(fields) > 9L) fields[10:length(fields)] else character()
+  if (any(!nzchar(sample.id))) {
+    rlang::abort("The VCF contains an empty sample identifier.")
+  }
+  if (anyDuplicated(sample.id)) {
+    rlang::abort("The VCF contains duplicated sample identifiers.")
+  }
   id <- tibble::tibble(
-    INDIVIDUALS = SeqArray::seqVCF_Header(vcf.fn = vcf, getnum = TRUE)$sample.id
+    INDIVIDUALS = sample.id
   )
   return(id)
 }#End extract_individuals_vcf
@@ -2054,7 +2118,17 @@ extract_individuals_vcf <- function(vcf) {
 #' @keywords internal
 #' @export
 extract_info_vcf <- function(vcf) {
-  vcf.info <- SeqArray::seqVCF_Header(vcf.fn = vcf, getnum = TRUE)
+  if (!is.character(vcf) || length(vcf) != 1L || !file.exists(vcf)) {
+    rlang::abort("`vcf` must be the path to an existing VCF file.")
+  }
+  vcf.info <- suppressMessages({
+    requireNamespace("SeqArray", quietly = TRUE)
+    SeqArray::seqVCF_Header(
+      vcf.fn = vcf,
+      getnum = TRUE,
+      verbose = FALSE
+    )
+  })
   res <- list(
     vcf.source = vcf.info$header$value[2],
     n.ind = vcf.info$num.sample,

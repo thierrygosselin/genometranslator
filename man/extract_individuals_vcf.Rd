@@ -15,7 +15,10 @@ A tibble with a column: \code{INDIVIDUALS}.
 \description{
 Function that returns the individuals present in a vcf file.
 Useful to create a strata file or
-to make sure you have the right individuals in your VCF.
+to make sure you have the right individuals in your VCF. Only the VCF header
+and first variant record are read; variants are not counted or imported. The
+fixed VCF columns and record width are validated before sample IDs are
+returned.
 }
 \examples{
 \dontrun{

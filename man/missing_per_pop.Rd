@@ -11,5 +11,7 @@ missing_per_pop(gds, strata, parallel.core = parallel::detectCores() - 1)
 }
 \description{
 Generate missingness per markers per pop helper table
+using the variants and samples currently active in the GDS. The incoming GDS
+filter is restored before the function returns, including after an error.
 }
 \keyword{internal}

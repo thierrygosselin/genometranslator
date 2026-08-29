@@ -2973,11 +2973,35 @@ generate_stats <- function(
   # required info --------------------------------------------------------------
   data.source <- extract_data_source(gds)
   if (individuals) {
-    i.info <- extract_individuals_metadata(gds, ind.field.select = c("INDIVIDUALS", "STRATA"), whitelist = TRUE)
+    active.samples <- SeqArray::seqGetData(gds, "sample.id")
+    i.info <- extract_individuals_metadata(
+      gds,
+      ind.field.select = c("INDIVIDUALS", "STRATA"),
+      whitelist = FALSE
+    )
+    sample.match <- match(active.samples, i.info$INDIVIDUALS)
+    if (anyNA(sample.match)) {
+      rlang::abort(
+        "Active GDS samples could not be matched to individuals metadata."
+      )
+    }
+    i.info <- i.info[sample.match, , drop = FALSE]
+    active.samples <- sample.match <- NULL
   }
 
-  # need this info even if markers = FALSE
-  m.info <- extract_markers_metadata(gds = gds, whitelist = TRUE)
+  # Statistics are computed from the active SeqArray selection. Match and
+  # reorder metadata to that selection rather than assuming its FILTERS column
+  # is already synchronized with the in-memory GDS filter.
+  active.variant.id <- SeqArray::seqGetData(gds, "variant.id")
+  m.info <- extract_markers_metadata(gds = gds, whitelist = FALSE)
+  variant.match <- match(active.variant.id, m.info$VARIANT_ID)
+  if (anyNA(variant.match)) {
+    rlang::abort(
+      "Active GDS variants could not be matched to markers metadata."
+    )
+  }
+  m.info <- m.info[variant.match, , drop = FALSE]
+  active.variant.id <- variant.match <- NULL
   n.markers.tot <- nrow(m.info)
   # check required COL info
   if (!rlang::has_name(m.info, "COL")) snp.position.read <- FALSE
@@ -2986,18 +3010,24 @@ generate_stats <- function(
   # snp.per.locus --------------------------------------------------------------
   if (snp.per.locus) {
     if (verbose) cli::cli_progress_step("SNPs per locus")
-    if (!rlang::has_name(m.info, "SNP_PER_LOCUS") || force.stats) {
+    ref.genome <- detect_ref_genome(data = gds, verbose = FALSE)
+    stacks.haplotype <- identical(tolower(data.source), "stacks") &&
+      !ref.genome && !detect_biallelic_markers(data = gds)
+    if (!rlang::has_name(m.info, "SNP_PER_LOCUS") || force.stats ||
+        ref.genome || !stacks.haplotype) {
       biallelic <- detect_biallelic_markers(data = gds)
-      if (biallelic) {
+      if (!stacks.haplotype) {
         m.info %<>%
           dplyr::group_by(LOCUS) %>%
           dplyr::mutate(SNP_PER_LOCUS = dplyr::n()) %>%
           dplyr::ungroup(.)
       } else {
-        if (verbose) message("With haplotype vcf, number of SNP/locus is counted based on the REF allele")
-        if (verbose) message("    this stat is good only if nuc length is equal between REF and ALT haplotypes")
-        if (verbose) message("    stacks haplotype vcf: ok")
-        if (verbose) message("    dDocent/freebayes haplotype vcf: be careful")
+        if (verbose) {
+          message(
+            "STACKS haplotype VCF detected: SNPs per locus are inferred from ",
+            "the encoded haplotype sequence."
+          )
+        }
 
         m.info %<>%
           dplyr::mutate(
@@ -3005,6 +3035,7 @@ generate_stats <- function(
               str = SeqArray::seqGetData(gdsfile = gds, var.name = "$ref"))
           )
       }
+      biallelic <- ref.genome <- stacks.haplotype <- NULL
     }
     m.stats %<>%
       dplyr::bind_rows(
@@ -4163,6 +4194,8 @@ generate_gt_vcf_nuc <- function(gds) {
 # missingness per markers per pop-----------------------------------------------
 #' @title missing_per_pop
 #' @description Generate missingness per markers per pop helper table
+#' using the variants and samples currently active in the GDS. The incoming GDS
+#' filter is restored before the function returns, including after an error.
 #' @rdname missing_per_pop
 #' @keywords internal
 #' @param parallel.core 
@@ -4177,7 +4210,6 @@ missing_per_pop <- function(
   missing_pop <- function(
     id.select,
     gds,
-    markers.meta,
     parallel.core = parallel::detectCores() - 1
   ) {
     SeqArray::seqSetFilter(
@@ -4191,14 +4223,16 @@ missing_per_pop <- function(
     } else {
       parallel.core.temp = parallel.core
     }
-    res <- markers.meta %>%
-      dplyr::mutate(
-        MISSING_PROP = SeqArray::seqMissing(
-          gdsfile = gds,
-          per.variant = TRUE,
-          parallel = parallel.core.temp
-        )
+    # seqMissing() returns one value for each active GDS variant. Build the
+    # result from that active vector instead of attaching it to the complete
+    # markers metadata table, which can also contain inactive variants.
+    res <- tibble::tibble(
+      MISSING_PROP = SeqArray::seqMissing(
+        gdsfile = gds,
+        per.variant = TRUE,
+        parallel = parallel.core.temp
       )
+    )
 
     mis_many_markers <- function(threshold, x) {
       nrow(dplyr::filter(x, MISSING_PROP <= threshold))
@@ -4212,17 +4246,30 @@ missing_per_pop <- function(
     return(helper.table)
   }#End missing_pop
 
-  sample.bk <- extract_individuals_metadata(
-    gds = gds,
-    ind.field.select = "INDIVIDUALS",
-    whitelist = TRUE
-  ) %$% INDIVIDUALS
+  # Preserve the exact active GDS filter. Metadata whitelists and active GDS
+  # variants are not necessarily identical after sequential filtering.
+  sample.bk <- SeqArray::seqGetData(gdsfile = gds, var.name = "sample.id")
+  variant.bk <- SeqArray::seqGetData(gdsfile = gds, var.name = "variant.id")
+  n.markers <- length(variant.bk)
+  on.exit(
+    SeqArray::seqSetFilter(
+      object = gds,
+      sample.id = sample.bk,
+      variant.id = variant.bk,
+      action = "set",
+      verbose = FALSE
+    ),
+    add = TRUE
+  )
 
-  markers.meta <- extract_markers_metadata(
-    gds = gds,
-    markers.meta.select = "MARKERS",
-    whitelist = TRUE)
-  n.markers <- nrow(markers.meta)
+  if (!all(c("INDIVIDUALS", "STRATA") %in% names(strata))) {
+    rlang::abort("`strata` must contain `INDIVIDUALS` and `STRATA` columns.")
+  }
+  strata <- strata %>%
+    dplyr::filter(.data$INDIVIDUALS %in% sample.bk)
+  if (!nrow(strata)) {
+    rlang::abort("No strata individuals are active in the GDS filter.")
+  }
 
   res <- strata %>%
     # dplyr::group_by(STRATA) %>%
@@ -4233,19 +4280,11 @@ missing_per_pop <- function(
         .x = .$id.select,
         .f = missing_pop,
         gds = gds,
-        markers.meta = markers.meta,
         parallel.core = parallel.core),
       id.select = NULL
     ) %>%
     tidyr::unnest(data = ., MISSING_POP) %>%
     dplyr::mutate(BLACKLISTED_MARKERS = n.markers - WHITELISTED_MARKERS)
-
-  # reset filter
-  SeqArray::seqSetFilter(
-    object = gds,
-    sample.id = sample.bk,
-    action = "set",
-    verbose = FALSE)
 
   return(res)
 }#End missing_per_pop

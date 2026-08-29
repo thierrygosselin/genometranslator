@@ -181,6 +181,13 @@ read_genome <- function(
   if ("gds.file" %in% data.type) {
     if (verbose) message("Opening GDS file connection")
 
+    # RNeXML and Bioconductor's S4Vectors both define an S4 class named
+    # "Annotated". Loading SeqArray after RNeXML can otherwise print repeated
+    # class-cache messages even though the GDS opens normally.
+    suppressMessages(
+      requireNamespace("SeqArray", quietly = TRUE)
+    )
+
     seq_open_temp <- function(data, allow.dup) {
       SeqArray::seqOpen(gds.fn = data, readonly = allow.dup, allow.duplicate = allow.dup)
     }#End seq_open_temp
