@@ -2262,6 +2262,67 @@ active_gds_filters <- function(gds) {
   )
 }
 
+.filter_history_columns <- c(
+  "FILTERS", "PARAMETERS", "VALUES", "BEFORE", "AFTER", "BLACKLIST",
+  "UNITS", "COMMENTS"
+)
+
+empty_filter_history <- function() {
+  tibble::as_tibble(stats::setNames(
+    rep(list(character()), length(.filter_history_columns)),
+    .filter_history_columns
+  ))
+}
+
+normalize_filter_history <- function(x) {
+  if (is.null(x) || !nrow(x)) return(empty_filter_history())
+  missing.columns <- setdiff(.filter_history_columns, names(x))
+  if (length(missing.columns)) {
+    rlang::abort(paste0(
+      "Filter history is missing required column(s): ",
+      paste(missing.columns, collapse = ", "), "."
+    ))
+  }
+  x <- dplyr::select(x, dplyr::all_of(.filter_history_columns))
+  x[] <- lapply(x, as.character)
+  tibble::as_tibble(x)
+}
+
+read_filter_history <- function(gds) {
+  history.node <- gdsfmt::index.gdsn(
+    node = gds,
+    path = genome_metadata_path(gds, "filter_history"),
+    silent = TRUE
+  )
+  if (is.null(history.node)) return(empty_filter_history())
+  fields <- gdsfmt::ls.gdsn(history.node)
+  if (!length(fields)) return(empty_filter_history())
+  values <- purrr::map(fields, function(field) {
+    gdsfmt::read.gdsn(gdsfmt::index.gdsn(
+      node = gds,
+      path = paste0(
+        genome_metadata_path(gds, "filter_history"), "/", field
+      ),
+      silent = TRUE
+    ))
+  })
+  names(values) <- fields
+  normalize_filter_history(tibble::as_tibble(values))
+}
+
+write_filter_history <- function(gds, history) {
+  history <- normalize_filter_history(history)
+  update_genome_gds(
+    gds = gds,
+    node.name = "filter_history",
+    value = history,
+    replace = TRUE,
+    sync = FALSE,
+    verbose = FALSE
+  )
+  invisible(history)
+}
+
 gds_open_summary <- function(gds) {
   current <- SeqArray::seqGetFilter(gds)
   filters <- active_gds_filters(gds)
@@ -2285,18 +2346,36 @@ gds_open_summary <- function(gds) {
 #' @rdname list_filters
 #' @title List current active filters in a genometranslator GDS object
 #' @description List current active filters for individuals and markers in a
-#' genometranslator GDS object.
+#' genometranslator GDS object. Optionally include the persistent filtering
+#' history and write that history to a TSV file.
 #' @inheritParams genometranslator_common_arguments
+#' @param history Include the complete filtering history stored in the GDS.
+#' @param filename Optional TSV filepath used to export the filtering history.
+#'   Supplying a filename automatically retrieves the history.
+#' @param verbose Display the active-filter summary and history messages.
 #' @export
 #' @examples
 #' \dontrun{
 #' # List active filters for individuals and markers
 #' list_filters(gds)
+#'
+#' # Include thresholds and before/after dimensions, then save them
+#' list_filters(
+#'   gds,
+#'   history = TRUE,
+#'   filename = "filters_parameters_complete.tsv"
+#' )
 #' }
-#' @seealso \code{\link{sync_gds}}, \code{\link{list_filters}}.
+#' @seealso \code{\link{sync_gds}}, \code{\link{reset_filters}},
+#'   \code{\link{import_filter_history}}.
 #' @author Thierry Gosselin \email{thierrygosselin@@icloud.com}
 
-list_filters <- function(gds) {
+list_filters <- function(
+    gds,
+    history = FALSE,
+    filename = NULL,
+    verbose = TRUE
+) {
   tgbase::check_package("SeqArray", cran = FALSE, bioc = TRUE)
 
   data.type <- genometranslator::detect_genomic_format(gds)
@@ -2304,20 +2383,37 @@ list_filters <- function(gds) {
   if (!data.type %in% c("SeqVarGDSClass", "gds.file")) {
     rlang::abort("Input not supported for this function: read function documentation")
   }
+  opened.here <- FALSE
   if (data.type == "gds.file") {
     gds <- genometranslator::read_genome(gds, verbose = FALSE)
-    data.type <- "SeqVarGDSClass"
+    opened.here <- TRUE
   }
+  on.exit({
+    if (opened.here) try(SeqArray::seqClose(gds), silent = TRUE)
+  }, add = TRUE)
   filters <- active_gds_filters(gds)
-  message("Number of filters for individuals: ", length(filters$individuals))
-  if (length(filters$individuals) > 0L) {
-    message("Filter(s): ")
-    message(stringi::stri_join(filters$individuals, collapse = "\n"))
+  if (verbose) {
+    message("Number of filters for individuals: ", length(filters$individuals))
+    if (length(filters$individuals) > 0L) {
+      message("Filter(s): ")
+      message(stringi::stri_join(filters$individuals, collapse = "\n"))
+    }
+    message("\nNumber of filters for markers: ", length(filters$markers))
+    if (length(filters$markers) > 0L) {
+      message("Filter(s): ")
+      message(stringi::stri_join(filters$markers, collapse = "\n"))
+    }
   }
-  message("\nNumber of filters for markers: ", length(filters$markers))
-  if (length(filters$markers) > 0L) {
-    message("Filter(s): ")
-    message(stringi::stri_join(filters$markers, collapse = "\n"))
+  if (history || !is.null(filename)) {
+    filters$history <- read_filter_history(gds)
+    if (verbose) message("\nFiltering-history operations: ", nrow(filters$history))
+    if (!is.null(filename)) {
+      if (length(filename) != 1L || is.na(filename) || !nzchar(filename)) {
+        rlang::abort("`filename` must be NULL or one non-empty filepath.")
+      }
+      readr::write_tsv(filters$history, filename)
+      if (verbose) message("Filter history written: ", basename(filename))
+    }
   }
   invisible(filters)
 }#list_filters

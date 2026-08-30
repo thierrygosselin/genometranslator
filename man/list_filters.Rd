@@ -4,24 +4,40 @@
 \alias{list_filters}
 \title{List current active filters in a genometranslator GDS object}
 \usage{
-list_filters(gds)
+list_filters(gds, history = FALSE, filename = NULL, verbose = TRUE)
 }
 \arguments{
 \item{gds}{A genome GDS file path or object.
 Default: \code{gds = NULL}.}
+
+\item{history}{Include the complete filtering history stored in the GDS.}
+
+\item{filename}{Optional TSV filepath used to export the filtering history.
+Supplying a filename automatically retrieves the history.}
+
+\item{verbose}{Display the active-filter summary and history messages.}
 }
 \description{
 List current active filters for individuals and markers in a
-genometranslator GDS object.
+genometranslator GDS object. Optionally include the persistent filtering
+history and write that history to a TSV file.
 }
 \examples{
 \dontrun{
 # List active filters for individuals and markers
 list_filters(gds)
+
+# Include thresholds and before/after dimensions, then save them
+list_filters(
+  gds,
+  history = TRUE,
+  filename = "filters_parameters_complete.tsv"
+)
 }
 }
 \seealso{
-\code{\link{sync_gds}}, \code{\link{list_filters}}.
+\code{\link{sync_gds}}, \code{\link{reset_filters}},
+\code{\link{import_filter_history}}.
 }
 \author{
 Thierry Gosselin \email{thierrygosselin@icloud.com}

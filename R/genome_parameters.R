@@ -1,8 +1,11 @@
 # genome_parameters -----------------------------------------------------------
 #' Track changes to genomic data
 #'
-#' Creates, initiates, or updates a tab-separated history of operations that
-#' change a genomic dataset.
+#' Creates, initiates, or updates a history of operations that change a genomic
+#' dataset. For a genometranslator GDS, the cumulative history is persisted in
+#' the GDS metadata and each generated TSV is a snapshot of that history at the
+#' beginning of the current operation. The completed operation is then appended
+#' to both the TSV and the GDS.
 #'
 #' @param generate,initiate,update Logical controls for creating, initiating,
 #'   and updating the parameter history.
@@ -26,8 +29,8 @@
 #' Default: \code{file.date = NULL}.
 #' @param internal,verbose Logical controls for internal use and messages.
 #'
-#' @return A list containing the genomic summary, parameter row, and history
-#'   file path as applicable.
+#' @return A list containing the genomic summary, current parameter row,
+#'   cumulative `filter.history`, and history-file path as applicable.
 #' @param verbose 
 #' Default: \code{verbose = TRUE}.
 #' 
@@ -85,17 +88,14 @@ genome_parameters <- function(
 
     parameter.obj$filters.parameters.path <- parameter.path
     res$filters.parameters.path <- parameter.path
-    res$filters.parameters <- tibble::tibble(
-      FILTERS = character(),
-      PARAMETERS = character(),
-      VALUES = character(),
-      BEFORE = character(),
-      AFTER = character(),
-      BLACKLIST = integer(),
-      UNITS = character(),
-      COMMENTS = character()
-    )
-    readr::write_tsv(res$filters.parameters, parameter.path)
+    filter.history <- if (inherits(data, "SeqVarGDSClass")) {
+      read_filter_history(data)
+    } else {
+      empty_filter_history()
+    }
+    res$filters.parameters <- empty_filter_history()
+    res$filter.history <- filter.history
+    readr::write_tsv(filter.history, parameter.path)
     if (verbose) message("Genome parameters file generated: ", basename(parameter.path))
   }
 
@@ -112,7 +112,7 @@ genome_parameters <- function(
     before <- unname(unlist(info[c("n.ind", "n.pop", "n.chrom", "n.locus", "n.snp")]))
     after <- unname(unlist(info.new[c("n.ind", "n.pop", "n.chrom", "n.locus", "n.snp")]))
 
-    res$filters.parameters <- tibble::tibble(
+    res$filters.parameters <- normalize_filter_history(tibble::tibble(
       FILTERS = filter.name,
       PARAMETERS = param.name,
       VALUES = if (is.null(values)) "not filtering" else values,
@@ -121,7 +121,7 @@ genome_parameters <- function(
       BLACKLIST = paste(before - after, collapse = " / "),
       UNITS = units,
       COMMENTS = comments
-    )
+    ))
     readr::write_tsv(
       res$filters.parameters,
       parameter.obj$filters.parameters.path,
@@ -132,11 +132,98 @@ genome_parameters <- function(
       "Genome parameters file updated: ",
       basename(parameter.obj$filters.parameters.path)
     )
+    if (inherits(data, "SeqVarGDSClass")) {
+      filter.history <- dplyr::bind_rows(
+        read_filter_history(data),
+        res$filters.parameters
+      )
+      write_filter_history(data, filter.history)
+      res$filter.history <- filter.history
+    }
     res$info <- info.new
     res$filters.parameters.path <- parameter.obj$filters.parameters.path
   }
 
   res
+}
+
+#' Import legacy filter-parameter files into a GDS
+#'
+#' Imports one or more historical `filters_parameters_*.tsv` files into the
+#' persistent filtering history stored in a genometranslator GDS. Each element
+#' of `paths` may be a parameter file or a filter-results directory containing
+#' one or more parameter files. Files are imported in the order supplied.
+#'
+#' @param gds A writable genome GDS filepath or open `SeqVarGDSClass` object.
+#' @param paths Character vector of parameter files or filter-results folders.
+#' @param replace Replace the existing GDS history instead of appending to it.
+#' @param filename Optional TSV filepath for a snapshot of the resulting
+#'   cumulative history.
+#' @param verbose Display progress messages.
+#'
+#' @return Invisibly returns the cumulative filter-history tibble.
+#' @export
+import_filter_history <- function(
+    gds,
+    paths,
+    replace = FALSE,
+    filename = NULL,
+    verbose = TRUE
+) {
+  if (!length(paths) || anyNA(paths)) {
+    rlang::abort("`paths` must contain at least one file or directory.")
+  }
+  files <- unlist(lapply(as.character(paths), function(path) {
+    if (dir.exists(path)) {
+      list.files(
+        path,
+        pattern = "^filters_parameters.*[.]tsv$",
+        full.names = TRUE
+      )
+    } else if (file.exists(path)) {
+      path
+    } else {
+      rlang::abort(paste0("Filter-history path does not exist: ", path))
+    }
+  }), use.names = FALSE)
+  if (!length(files)) {
+    rlang::abort("No `filters_parameters_*.tsv` files were found.")
+  }
+  imported <- purrr::map_dfr(files, function(file) {
+    normalize_filter_history(readr::read_tsv(
+      file,
+      col_types = readr::cols(.default = readr::col_character()),
+      show_col_types = FALSE,
+      progress = FALSE
+    ))
+  })
+
+  opened.here <- FALSE
+  if (is.character(gds) && length(gds) == 1L && file.exists(gds)) {
+    gds <- read_genome(gds, verbose = FALSE)
+    opened.here <- TRUE
+  }
+  if (!inherits(gds, "SeqVarGDSClass")) {
+    rlang::abort("`gds` must be a GDS filepath or open SeqVarGDSClass object.")
+  }
+  on.exit({
+    if (opened.here) try(SeqArray::seqClose(gds), silent = TRUE)
+  }, add = TRUE)
+
+  history <- if (replace) {
+    imported
+  } else {
+    dplyr::bind_rows(read_filter_history(gds), imported)
+  }
+  write_filter_history(gds, history)
+  if (!is.null(filename)) readr::write_tsv(history, filename)
+  if (verbose) {
+    message(
+      "Imported ", nrow(imported), " filtering operation(s) from ",
+      length(files), " file(s)."
+    )
+  }
+  invisible(history)
 }
 
 

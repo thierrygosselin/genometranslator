@@ -65,10 +65,13 @@ Default: \code{file.date = NULL}.}
 \item{generate}{Default: \code{generate = FALSE}.}
 }
 \value{
-A list containing the genomic summary, parameter row, and history
-file path as applicable.
+A list containing the genomic summary, current parameter row,
+cumulative \code{filter.history}, and history-file path as applicable.
 }
 \description{
-Creates, initiates, or updates a tab-separated history of operations that
-change a genomic dataset.
+Creates, initiates, or updates a history of operations that change a genomic
+dataset. For a genometranslator GDS, the cumulative history is persisted in
+the GDS metadata and each generated TSV is a snapshot of that history at the
+beginning of the current operation. The completed operation is then appended
+to both the TSV and the GDS.
 }
