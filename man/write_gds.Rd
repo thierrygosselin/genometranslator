@@ -23,9 +23,9 @@ generated the data. e.g. \code{data.source = "Stacks v.2.4"}.
 Default: \code{data.source = NULL}.}
 
 \item{filename}{(optional) The file name of the Genomic Data Structure (GDS) file.
-radiator will append \code{.gds.rad} to the filename.
+genometranslator will append \code{.gds} to the filename.
 If filename chosen is already present in the
-working directory, the default \code{radiator_datetime.gds.rad} is chosen.
+working directory, a timestamped \code{.gds} filename is chosen.
 Default: \code{filename = NULL}.}
 
 \item{open}{(optional, logical) Open or not the radiator connection.

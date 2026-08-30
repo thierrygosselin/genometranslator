@@ -2,11 +2,16 @@
 % Please edit documentation in R/gds.R
 \name{upgrade_genome_gds}
 \alias{upgrade_genome_gds}
-\title{Upgrade a legacy radiator GDS file}
+\title{Upgrade a legacy GDS file}
 \usage{
 upgrade_genome_gds(
   gds,
   filename = NULL,
+  repair = TRUE,
+  modernize.markers = TRUE,
+  validate = TRUE,
+  report = TRUE,
+  report.filename = NULL,
   overwrite = FALSE,
   open = FALSE,
   verbose = TRUE
@@ -15,9 +20,27 @@ upgrade_genome_gds(
 \arguments{
 \item{gds}{Path to a GDS file or an open GDS connection.}
 
-\item{filename}{Output filename. When \code{NULL},
-\code{_genometranslator.gds} is appended to the source stem.
+\item{filename}{Output filename. A missing \code{.gds} extension is added.
+When \code{NULL}, \code{x.gds.rad} becomes \code{x.gds}; an existing
+\code{x.gds} becomes \code{x_upgraded.gds}.
 Default: \code{filename = NULL}.}
+
+\item{repair}{Reconstruct missing marker and individual metadata and create
+missing current-schema nodes when possible. Default: \code{repair = TRUE}.}
+
+\item{modernize.markers}{Rebuild stable marker identifiers using the current
+\code{CHROM__LOCUS__POS} convention. Previous identifiers and changed
+coordinates are retained in \code{ORIGINAL_*} columns.
+Default: \code{modernize.markers = TRUE}.}
+
+\item{validate}{Compare metadata identifiers and dimensions with the core
+SeqArray nodes. Default: \code{validate = TRUE}.}
+
+\item{report}{Write a TSV migration report beside the output GDS.
+Default: \code{report = TRUE}.}
+
+\item{report.filename}{Optional report filepath. The default is based on the
+output filename.}
 
 \item{overwrite}{Whether an existing output file may be replaced.
 Default: \code{overwrite = FALSE}.}
@@ -32,10 +55,20 @@ Default: \code{verbose = TRUE}.}
 }
 \value{
 Invisibly returns the output path, or an open SeqArray connection
-when \code{open = TRUE}.
+when \code{open = TRUE}. The returned object carries the migration table
+in an \code{upgrade_report} attribute; a returned path also carries the
+report filepath in \code{report_filename} when a report was written.
 }
 \description{
-Creates a new GDS file and migrates its package metadata namespace from
-\code{/radiator} to \code{/genometranslator}. The source file is never
-modified. Standard SeqArray nodes and all metadata values are preserved.
+Creates a modern \code{.gds} copy, migrates the package metadata namespace
+from \code{/radiator} to \code{/genometranslator}, repairs metadata that can
+be reconstructed from SeqArray nodes, modernizes marker identifiers, and
+validates marker and sample correspondence. The source file is never
+modified and information that was not stored cannot be reconstructed.
+}
+\examples{
+\dontrun{
+upgraded <- upgrade_genome_gds("shark.gds.rad")
+attr(upgraded, "upgrade_report")
+}
 }

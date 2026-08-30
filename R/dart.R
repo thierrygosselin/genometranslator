@@ -298,7 +298,7 @@ read_dart <- function(
     name.shortcut = filename,
     path.folder = path.folder,
     date = TRUE,
-    extension = "gds.rad")$filename
+    extension = "gds")$filename
 
   filename <- generate_filename(
     name.shortcut = filename,

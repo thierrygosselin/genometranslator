@@ -438,6 +438,40 @@ write_genome(
 The name `shark_filtered.vcf` should only be used if `genome` was filtered
 before the call: the writer itself does not perform that filtering.
 
+### Upgrade legacy `.gds.rad` files
+
+New GDS files use the standard `.gds` extension regardless of whether their
+source was DArT, VCF, PLINK, or another format. The source format and provenance
+belong in the GDS metadata rather than in the filename.
+
+Use `upgrade_genome_gds()` to migrate an older package or plain SeqArray GDS:
+
+```{r upgrade-gds, eval=FALSE}
+new_file <- upgrade_genome_gds("shark.gds.rad")
+# Writes shark.gds and shark_upgrade_report.tsv
+```
+
+The original file is never modified. The upgrade copies the file atomically,
+migrates `/radiator` metadata to `/genometranslator`, creates current-schema
+nodes, reconstructs marker and individual metadata where possible, modernizes
+legacy marker identifiers, inventories depth and likelihood nodes, and checks
+metadata identifiers against the core SeqArray variants and samples. Previous
+marker identifiers are retained in `ORIGINAL_MARKERS` when they change.
+
+Information that was never stored cannot be recreated. The report therefore
+distinguishes migrated, reconstructed, retained, unavailable, and failed or
+warning checks. In particular, missing strata, source sequences, DP, AD, or
+provenance must be supplied from the original files if they are required.
+
+For a dry metadata-preserving conversion without identifier modernization, use:
+
+```{r upgrade-gds-conservative, eval=FALSE}
+new_file <- upgrade_genome_gds(
+  "shark.gds.rad",
+  modernize.markers = FALSE
+)
+```
+
 When finished with an open GDS connection, close it with:
 
 ```{r close-genome, eval=FALSE}

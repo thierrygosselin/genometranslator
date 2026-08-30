@@ -36,8 +36,8 @@
 #' Default: \code{strata = NULL}.
 #'
 #' @param filename (optional, character)
-#' Base name of the GDS file to generate. Radiator will append
-#' \code{.gds.rad} to the filename. If the chosen filename already exists
+#' Base name of the GDS file to generate. genometranslator will append
+#' \code{.gds} to the filename. If the chosen filename already exists
 #' in \code{path.folder}, a timestamped default name is used instead.
 #' Default: \code{filename = NULL}.
 #'

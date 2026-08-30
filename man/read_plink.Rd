@@ -22,7 +22,7 @@ read_plink(
 }}
 
 \item{filename}{(optional) The file name of the Genomic Data Structure (GDS) file.
-radiator will append \code{.gds.rad} to the filename.
+genometranslator will append \code{.gds} to the filename.
 If the filename chosen exists in the working directory,
 the default \code{radiator_datetime.gds} is chosen.
 Default: \code{filename = NULL}.}

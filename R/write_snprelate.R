@@ -77,7 +77,7 @@ write_snprelate <- function(data, biallelic = TRUE, filename = NULL, verbose = T
   file.date <- format(Sys.time(), "%Y%m%d@%H%M")
 
   if (!is.null(filename)) filename <- stringi::stri_join(filename, "_snprelate")
-  filename <- generate_filename(name.shortcut = filename, extension = "gds.rad")
+  filename <- generate_filename(name.shortcut = filename, extension = "gds")
 
   # Import data ---------------------------------------------------------------
   if (is.vector(data)) {

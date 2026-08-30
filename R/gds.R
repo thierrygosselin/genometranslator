@@ -69,11 +69,15 @@ genome_gds <- function(
   if (is.null(filename)) {
     filename <- generate_filename(
       name.shortcut = filename,
-      extension = "gds.rad"
+      extension = "gds"
     ) %$% filename
   }
 
   if (length(filename) > 1) filename <- filename$filename
+  filename <- sub("\\.gds\\.rad$", ".gds", filename, ignore.case = TRUE)
+  if (!grepl("\\.gds$", filename, ignore.case = TRUE)) {
+    filename <- paste0(filename, ".gds")
+  }
 
   temp.file <- stringi::stri_join("radiator_temp_", format(Sys.time(), "%Y%m%d@%H%M"))
 
@@ -669,16 +673,31 @@ genome_metadata_path <- function(gds, child = NULL) {
   if (is.null(child)) root else paste0(root, "/", child)
 }
 
-#' Upgrade a legacy radiator GDS file
+#' Upgrade a legacy GDS file
 #'
-#' Creates a new GDS file and migrates its package metadata namespace from
-#' \code{/radiator} to \code{/genometranslator}. The source file is never
-#' modified. Standard SeqArray nodes and all metadata values are preserved.
+#' Creates a modern \code{.gds} copy, migrates the package metadata namespace
+#' from \code{/radiator} to \code{/genometranslator}, repairs metadata that can
+#' be reconstructed from SeqArray nodes, modernizes marker identifiers, and
+#' validates marker and sample correspondence. The source file is never
+#' modified and information that was not stored cannot be reconstructed.
 #'
 #' @param gds Path to a GDS file or an open GDS connection.
-#' @param filename Output filename. When \code{NULL},
-#'   \code{_genometranslator.gds} is appended to the source stem.
+#' @param filename Output filename. A missing \code{.gds} extension is added.
+#'   When \code{NULL}, \code{x.gds.rad} becomes \code{x.gds}; an existing
+#'   \code{x.gds} becomes \code{x_upgraded.gds}.
 #' Default: \code{filename = NULL}.
+#' @param repair Reconstruct missing marker and individual metadata and create
+#'   missing current-schema nodes when possible. Default: \code{repair = TRUE}.
+#' @param modernize.markers Rebuild stable marker identifiers using the current
+#'   \code{CHROM__LOCUS__POS} convention. Previous identifiers and changed
+#'   coordinates are retained in \code{ORIGINAL_*} columns.
+#'   Default: \code{modernize.markers = TRUE}.
+#' @param validate Compare metadata identifiers and dimensions with the core
+#'   SeqArray nodes. Default: \code{validate = TRUE}.
+#' @param report Write a TSV migration report beside the output GDS.
+#'   Default: \code{report = TRUE}.
+#' @param report.filename Optional report filepath. The default is based on the
+#'   output filename.
 #' @param overwrite Whether an existing output file may be replaced.
 #' Default: \code{overwrite = FALSE}.
 #' @param open Whether to return an open, writable SeqArray connection instead
@@ -688,15 +707,37 @@ genome_metadata_path <- function(gds, child = NULL) {
 #'
 #' Default: \code{verbose = TRUE}.
 #' @return Invisibly returns the output path, or an open SeqArray connection
-#'   when \code{open = TRUE}.
+#'   when \code{open = TRUE}. The returned object carries the migration table
+#'   in an \code{upgrade_report} attribute; a returned path also carries the
+#'   report filepath in \code{report_filename} when a report was written.
+#' @examples
+#' \dontrun{
+#' upgraded <- upgrade_genome_gds("shark.gds.rad")
+#' attr(upgraded, "upgrade_report")
+#' }
 #' @export
 upgrade_genome_gds <- function(
   gds,
   filename = NULL,
+  repair = TRUE,
+  modernize.markers = TRUE,
+  validate = TRUE,
+  report = TRUE,
+  report.filename = NULL,
   overwrite = FALSE,
   open = FALSE,
   verbose = TRUE
 ) {
+  migration <- list()
+  add.migration <- function(step, status, details) {
+    migration[[length(migration) + 1L]] <<- tibble::tibble(
+      STEP = as.character(step),
+      STATUS = as.character(status),
+      DETAILS = as.character(details)
+    )
+    invisible(NULL)
+  }
+
   source.connection <- !is.character(gds)
 
   if (source.connection) {
@@ -715,13 +756,15 @@ upgrade_genome_gds <- function(
   source.filename <- normalizePath(source.filename, mustWork = TRUE)
 
   if (is.null(filename)) {
-    source.stem <- sub(
-      pattern = "(\\.gds\\.rad|\\.gds|\\.rad)$",
-      replacement = "",
-      x = source.filename,
-      ignore.case = TRUE
-    )
-    filename <- paste0(source.stem, "_genometranslator.gds")
+    if (grepl("\\.gds\\.rad$|\\.rad$", source.filename, ignore.case = TRUE)) {
+      filename <- paste0(sub("(\\.gds\\.rad|\\.rad)$", "", source.filename,
+        ignore.case = TRUE), ".gds")
+    } else {
+      filename <- paste0(sub("\\.gds$", "", source.filename,
+        ignore.case = TRUE), "_upgraded.gds")
+    }
+  } else if (!grepl("\\.gds$", filename, ignore.case = TRUE)) {
+    filename <- paste0(filename, ".gds")
   }
 
   filename <- path.expand(filename)
@@ -737,6 +780,20 @@ upgrade_genome_gds <- function(
   }
   if (file.exists(filename) && !isTRUE(overwrite)) {
     rlang::abort(paste0("Output file already exists: ", filename))
+  }
+  if (isTRUE(report)) {
+    if (is.null(report.filename)) {
+      report.filename <- paste0(sub("\\.gds$", "", filename, ignore.case = TRUE),
+        "_upgrade_report.tsv")
+    }
+    report.filename <- path.expand(report.filename)
+    if (!dir.exists(dirname(report.filename))) {
+      rlang::abort(paste0("Report output directory does not exist: ",
+        dirname(report.filename)))
+    }
+    if (file.exists(report.filename) && !isTRUE(overwrite)) {
+      rlang::abort(paste0("Upgrade report already exists: ", report.filename))
+    }
   }
 
   temporary.file <- tempfile(
@@ -777,15 +834,24 @@ upgrade_genome_gds <- function(
   )
   legacy.node <- gdsfmt::index.gdsn(output.gds, "radiator", silent = TRUE)
 
-  if (is.null(current.node) && is.null(legacy.node)) {
-    rlang::abort("The GDS file has no `/radiator` metadata node to upgrade.")
-  }
-
   if (is.null(current.node)) {
-    gdsfmt::rename.gdsn(legacy.node, "genometranslator")
-    current.node <- legacy.node
+    if (!is.null(legacy.node)) {
+      gdsfmt::rename.gdsn(legacy.node, "genometranslator")
+      current.node <- legacy.node
+      add.migration("metadata namespace", "migrated",
+        "Renamed /radiator to /genometranslator.")
+    } else {
+      current.node <- gdsfmt::addfolder.gdsn(output.gds, "genometranslator")
+      add.migration("metadata namespace", "created",
+        "Created /genometranslator for a plain SeqArray GDS.")
+    }
   } else if (!is.null(legacy.node)) {
     gdsfmt::delete.gdsn(legacy.node, force = TRUE)
+    add.migration("metadata namespace", "cleaned",
+      "Removed redundant /radiator metadata after retaining /genometranslator.")
+  } else {
+    add.migration("metadata namespace", "retained",
+      "Existing /genometranslator metadata retained.")
   }
 
   gdsfmt::put.attr.gdsn(
@@ -798,6 +864,235 @@ upgrade_genome_gds <- function(
   gdsfmt::closefn.gds(output.gds)
   connection.open <- FALSE
 
+  output.seq <- SeqArray::seqOpen(
+    temporary.file,
+    readonly = FALSE,
+    allow.duplicate = TRUE
+  )
+  seq.open <- TRUE
+  on.exit({
+    if (isTRUE(seq.open)) try(SeqArray::seqClose(output.seq), silent = TRUE)
+  }, add = TRUE)
+
+  core.variant.id <- as.integer(SeqArray::seqGetData(output.seq, "variant.id"))
+  core.samples <- as.character(SeqArray::seqGetData(output.seq, "sample.id"))
+
+  if (isTRUE(repair)) {
+    required.nodes <- c(
+      "data.source", "input.file", "reference.genome", "biallelic",
+      "id.clean", "individuals.meta", "markers.meta", "genotypes.meta"
+    )
+    existing.nodes <- gdsfmt::ls.gdsn(gdsfmt::index.gdsn(
+      output.seq, "genometranslator", silent = FALSE
+    ))
+    missing.nodes <- setdiff(required.nodes, existing.nodes)
+    purrr::walk(missing.nodes, function(node.name) {
+      update_genome_gds(
+        gds = output.seq, node.name = node.name, value = NULL,
+        replace = FALSE, sync = FALSE, verbose = FALSE
+      )
+    })
+    add.migration(
+      "schema nodes",
+      if (length(missing.nodes)) "repaired" else "complete",
+      if (length(missing.nodes)) paste("Created:", paste(missing.nodes, collapse = ", ")) else
+        "All current-schema nodes were already present."
+    )
+    read.schema.value <- function(node.name) {
+      node <- gdsfmt::index.gdsn(
+        output.seq,
+        paste0("genometranslator/", node.name),
+        silent = TRUE
+      )
+      if (is.null(node)) return(NULL)
+      tryCatch(gdsfmt::read.gdsn(node), error = function(e) NULL)
+    }
+    provenance.fields <- c("data.source", "input.file", "reference.genome")
+    available.provenance <- provenance.fields[vapply(
+      provenance.fields,
+      function(x) {
+        value <- read.schema.value(x)
+        length(value) > 0L && !all(is.na(value)) && any(nzchar(as.character(value)))
+      },
+      logical(1)
+    )]
+    add.migration(
+      "source provenance",
+      if (length(available.provenance)) "retained" else "unavailable",
+      if (length(available.provenance)) {
+        paste("Available:", paste(available.provenance, collapse = ", "))
+      } else {
+        "No source, input-file, or reference record was stored; provenance cannot be inferred safely."
+      }
+    )
+
+    individuals <- extract_individuals_metadata(
+      output.seq, metadata.node = TRUE, verbose = FALSE
+    )
+    if (!nrow(individuals)) {
+      individuals <- tibble::tibble(INDIVIDUALS = core.samples)
+    }
+    if (!"INDIVIDUALS" %in% names(individuals)) {
+      individuals$INDIVIDUALS <- core.samples
+    }
+    individual.order <- match(core.samples, as.character(individuals$INDIVIDUALS))
+    if (anyNA(individual.order)) {
+      rlang::abort("Individual metadata could not be matched to every core sample.id.")
+    }
+    individuals <- individuals[individual.order, , drop = FALSE]
+    if (!"FILTERS" %in% names(individuals)) individuals$FILTERS <- "whitelist"
+    update_genome_gds(
+      output.seq, node.name = "individuals.meta", value = individuals,
+      replace = TRUE, sync = FALSE, verbose = FALSE
+    )
+    add.migration("individual metadata", "repaired",
+      paste(nrow(individuals), "sample records retained or reconstructed."))
+    strata.fields <- intersect(c("STRATA", "POP_ID"), names(individuals))
+    add.migration(
+      "sample strata",
+      if (length(strata.fields)) "retained" else "unavailable",
+      if (length(strata.fields)) paste("Available:", paste(strata.fields, collapse = ", ")) else
+        "No strata field was stored; population assignments cannot be reconstructed."
+    )
+
+    markers <- extract_markers_metadata(
+      output.seq, metadata.node = TRUE, verbose = FALSE
+    )
+    if (!nrow(markers)) {
+      markers <- extract_markers_metadata(
+        output.seq, metadata.node = FALSE, verbose = FALSE
+      )
+    }
+    if (!"VARIANT_ID" %in% names(markers)) markers$VARIANT_ID <- core.variant.id
+    marker.order <- match(core.variant.id, as.integer(markers$VARIANT_ID))
+    if (anyNA(marker.order)) {
+      rlang::abort("Marker metadata could not be matched to every core variant.id.")
+    }
+    markers <- markers[marker.order, , drop = FALSE]
+    if (!"CHROM" %in% names(markers)) {
+      markers$CHROM <- as.character(SeqArray::seqGetData(output.seq, "chromosome"))
+    }
+    if (!"POS" %in% names(markers)) {
+      markers$POS <- as.integer(SeqArray::seqGetData(output.seq, "position"))
+    }
+    if (!"LOCUS" %in% names(markers)) markers$LOCUS <- markers$VARIANT_ID
+    if (!"FILTERS" %in% names(markers)) markers$FILTERS <- "whitelist"
+
+    markers$CHROM <- as.character(markers$CHROM)
+    original.chrom <- markers$CHROM
+    blank.chrom <- is.na(markers$CHROM) | !nzchar(markers$CHROM) |
+      markers$CHROM == "CHROM"
+    if (any(blank.chrom)) markers$CHROM[blank.chrom] <- "DENOVO"
+    if (any(blank.chrom) && !"ORIGINAL_CHROM" %in% names(markers)) {
+      markers$ORIGINAL_CHROM <- original.chrom
+    }
+
+    if (isTRUE(modernize.markers)) {
+      marker.position <- markers$POS
+      if ("COL" %in% names(markers)) {
+        use.col <- markers$CHROM == "DENOVO" & is.na(marker.position) &
+          !is.na(markers$COL)
+        marker.position[use.col] <- markers$COL[use.col]
+      }
+      modern.markers <- make_marker_id(markers$CHROM, markers$LOCUS, marker.position)
+      placement.metadata <- any(c("ALIGN_STATUS", "ALIGN_CHROM", "SNP_QUERY_POS") %in%
+        names(markers))
+      if (!"MARKERS" %in% names(markers)) {
+        markers$MARKERS <- modern.markers
+        marker.status <- "reconstructed"
+        marker.details <- "MARKERS was absent and was reconstructed from source identity fields."
+      } else if (placement.metadata) {
+        marker.status <- "retained"
+        marker.details <- paste(
+          "Marker-placement metadata was detected; immutable source MARKERS identifiers were retained.")
+      } else {
+        legacy.denovo <- grepl("^CHROM(_1)?__", markers$MARKERS) |
+          grepl("^DENOVO__", markers$MARKERS)
+        unsafe.reference <- !is.na(markers$CHROM) & markers$CHROM != "DENOVO" &
+          grepl(".", markers$CHROM, fixed = TRUE) &
+          startsWith(as.character(markers$MARKERS), paste0(markers$CHROM, "__"))
+        change <- legacy.denovo | unsafe.reference
+        if (any(change)) {
+          if (!"ORIGINAL_MARKERS" %in% names(markers)) {
+            markers$ORIGINAL_MARKERS <- as.character(markers$MARKERS)
+          }
+          markers$MARKERS[change] <- modern.markers[change]
+        }
+        marker.status <- if (any(change)) "modernized" else "retained"
+        marker.details <- if (any(change)) {
+          paste(sum(change), "legacy marker identifiers modernized; prior identifiers retained in ORIGINAL_MARKERS.")
+        } else {
+          "Existing marker identifiers already followed the current convention."
+        }
+      }
+      add.migration("marker identifiers", marker.status, marker.details)
+    } else if (!"MARKERS" %in% names(markers)) {
+      markers$MARKERS <- make_marker_id(markers$CHROM, markers$LOCUS, markers$POS)
+      add.migration("marker identifiers", "reconstructed",
+        "MARKERS was absent and was reconstructed from CHROM, LOCUS, and POS.")
+    }
+    update_genome_gds(
+      output.seq, node.name = "markers.meta", value = markers,
+      replace = TRUE, sync = FALSE, verbose = FALSE
+    )
+    add.migration("marker metadata", "repaired",
+      paste(nrow(markers), "marker records retained or reconstructed."))
+    sequence.fields <- intersect(c("SEQUENCE", "CLONE_SEQ", "CONSENSUS_SEQUENCE"),
+      names(markers))
+    add.migration(
+      "marker sequences",
+      if (length(sequence.fields)) "retained" else "unavailable",
+      if (length(sequence.fields)) paste("Available:", paste(sequence.fields, collapse = ", ")) else
+        "No source marker sequence was stored; it cannot be reconstructed."
+    )
+  } else {
+    individuals <- extract_individuals_metadata(output.seq, verbose = FALSE)
+    markers <- extract_markers_metadata(output.seq, verbose = FALSE)
+    add.migration("metadata repair", "not requested", "repair = FALSE")
+  }
+
+  format.node <- gdsfmt::index.gdsn(output.seq, "annotation/format", silent = TRUE)
+  format.nodes <- if (is.null(format.node)) character() else gdsfmt::ls.gdsn(format.node)
+  available.depth <- intersect(c("DP", "AD", "GL", "PL", "GP"), format.nodes)
+  add.migration(
+    "depth and likelihood nodes",
+    if (length(available.depth)) "retained" else "unavailable",
+    if (length(available.depth)) paste("Available:", paste(available.depth, collapse = ", ")) else
+      "No DP, AD, GL, PL, or GP node was stored; these values cannot be reconstructed."
+  )
+
+  filter.history <- tryCatch(read_filter_history(output.seq), error = function(e) NULL)
+  add.migration(
+    "filter history",
+    if (!is.null(filter.history) && nrow(filter.history)) "retained" else "unavailable",
+    if (!is.null(filter.history) && nrow(filter.history)) {
+      paste(nrow(filter.history), "stored filtering operations retained.")
+    } else {
+      "No persistent filter history was stored; external parameter files may be imported separately."
+    }
+  )
+
+  if (isTRUE(validate)) {
+    marker.ids <- if ("VARIANT_ID" %in% names(markers)) as.integer(markers$VARIANT_ID) else integer()
+    sample.ids <- if ("INDIVIDUALS" %in% names(individuals)) as.character(individuals$INDIVIDUALS) else character()
+    marker.ok <- length(marker.ids) == length(core.variant.id) &&
+      identical(marker.ids, core.variant.id)
+    sample.ok <- length(sample.ids) == length(core.samples) &&
+      setequal(sample.ids, core.samples)
+    add.migration("marker validation", if (marker.ok) "passed" else "warning",
+      paste(length(marker.ids), "metadata rows for", length(core.variant.id), "core variants."))
+    add.migration("sample validation", if (sample.ok) "passed" else "warning",
+      paste(length(sample.ids), "metadata rows for", length(core.samples), "core samples."))
+    if (!marker.ok) rlang::abort("Upgraded marker metadata failed core variant validation.")
+    if (!sample.ok) rlang::abort("Upgraded individual metadata failed core sample validation.")
+  } else {
+    add.migration("validation", "not requested", "validate = FALSE")
+  }
+
+  gdsfmt::sync.gds(output.seq)
+  SeqArray::seqClose(output.seq)
+  seq.open <- FALSE
+
   if (file.exists(filename) && isTRUE(overwrite)) {
     if (!file.remove(filename)) {
       rlang::abort(paste0("Unable to replace existing output file: ", filename))
@@ -808,16 +1103,27 @@ upgrade_genome_gds <- function(
   }
 
   filename <- normalizePath(filename, mustWork = TRUE)
-  if (isTRUE(verbose)) message("Upgraded GDS file written: ", filename)
+  migration <- dplyr::bind_rows(migration)
+  if (isTRUE(report)) {
+    readr::write_tsv(migration, report.filename)
+  }
+  if (isTRUE(verbose)) {
+    message("Upgraded GDS file written: ", filename)
+    if (isTRUE(report)) message("Upgrade report written: ", report.filename)
+  }
 
   if (isTRUE(open)) {
-    return(SeqArray::seqOpen(
+    result <- SeqArray::seqOpen(
       gds.fn = filename,
       readonly = FALSE,
       allow.duplicate = FALSE
-    ))
+    )
+    attr(result, "upgrade_report") <- migration
+    return(result)
   }
 
+  attr(filename, "upgrade_report") <- migration
+  attr(filename, "report_filename") <- if (isTRUE(report)) report.filename else NULL
   invisible(filename)
 }
 
@@ -4408,9 +4714,9 @@ missing_per_pop <- function(
 #' Default: \code{data.source = NULL}.
 
 #' @param filename (optional) The file name of the Genomic Data Structure (GDS) file.
-#' radiator will append \code{.gds.rad} to the filename.
+#' genometranslator will append \code{.gds} to the filename.
 #' If filename chosen is already present in the
-#' working directory, the default \code{radiator_datetime.gds.rad} is chosen.
+#' working directory, a timestamped \code{.gds} filename is chosen.
 #' Default: \code{filename = NULL}.
 
 #' @param open (optional, logical) Open or not the radiator connection.
