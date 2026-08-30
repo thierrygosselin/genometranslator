@@ -551,12 +551,12 @@ tidy_genome <- function(
       markers.meta %<>%
         dplyr::mutate(
           dplyr::across(
-            .cols = c(CHROM, LOCUS, POS),
+            .cols = c(LOCUS, POS),
             .fns = clean_markers_names
           )
         ) %>%
         dplyr::mutate(
-          MARKERS = stringi::stri_join(CHROM, LOCUS, POS, sep = "__")
+          MARKERS = make_marker_id(CHROM, LOCUS, POS)
         )
     }
     cn <- markers.meta %>% dplyr::pull(MARKERS)

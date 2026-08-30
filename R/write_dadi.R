@@ -200,12 +200,10 @@ write_dadi <- function(
     # Get the list of ref. allele in the vcf of the ingroup
     ref.allele.vcf.ingroup <- input.count %>%
       dplyr::ungroup(.) %>%
-      dplyr::distinct(MARKERS, REF, .keep_all = TRUE) %>%
-      dplyr::arrange(MARKERS) %>%
-      tidyr::separate(MARKERS, c("CHROM", "LOCUS", "POS"), sep = "__") %>%
+      dplyr::distinct(CHROM, LOCUS, POS, MARKERS, REF, .keep_all = TRUE) %>%
       dplyr::distinct(CHROM, LOCUS, POS, REF, .keep_all = TRUE) %>%
       dplyr::mutate(
-        CHROM = as.character(stringi::stri_replace_all_fixed(CHROM, pattern = "un", replacement = "1", vectorize_all = FALSE)),
+        CHROM = as.character(CHROM),
         LOCUS = as.integer(LOCUS),
         POS = as.integer(POS)
       ) %>%

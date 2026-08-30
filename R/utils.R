@@ -18,6 +18,41 @@ clean_markers_names <- function(x) {
     vectorize_all = FALSE)
 }#End clean_markers_names
 
+# Safe chromosome component used inside MARKERS. CHROM itself remains the
+# authoritative, unmodified reference/assembly sequence identifier.
+safe_marker_chrom <- function(chrom) {
+  original <- as.character(chrom)
+  de.novo <- is.na(original) | !nzchar(original) |
+    original %in% c("CHROM", "DENOVO")
+  safe <- clean_markers_names(original)
+  safe[de.novo] <- "DENOVO"
+  safe <- gsub("[^A-Za-z0-9_]", "_", safe)
+
+  map <- unique(data.frame(original = original, safe = safe, stringsAsFactors = FALSE))
+  map <- map[!is.na(map$original) & nzchar(map$original), , drop = FALSE]
+  collisions <- map$safe[duplicated(map$safe) | duplicated(map$safe, fromLast = TRUE)]
+  if (length(collisions)) {
+    details <- vapply(unique(collisions), function(id) {
+      paste(map$original[map$safe == id], collapse = ", ")
+    }, character(1))
+    rlang::abort(paste0(
+      "Distinct CHROM values produce the same safe MARKERS component: ",
+      paste(paste0(unique(collisions), " <- ", details), collapse = "; "),
+      ". Rename the conflicting reference sequences explicitly."
+    ))
+  }
+  safe
+}
+
+make_marker_id <- function(chrom, locus, position) {
+  stringi::stri_join(
+    safe_marker_chrom(chrom),
+    clean_markers_names(locus),
+    clean_markers_names(position),
+    sep = "__"
+  )
+}
+
 #' @title Clean individual's names for genomic workflows
 #' @description Function to clean individual's name
 #' that interfere with some packages

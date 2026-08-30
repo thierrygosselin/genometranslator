@@ -196,9 +196,9 @@ read_plink <- function(
       dplyr::mutate(
         CHROM = as.character(CHROM),
         LOCUS = as.character(LOCUS),
-        POS = as.character(POS)
-      ) %>%
-      tidyr::unite(data = ., col = "MARKERS", c("CHROM", "LOCUS", "POS"), remove = FALSE, sep = "__")
+        POS = as.character(POS),
+        MARKERS = make_marker_id(CHROM, LOCUS, POS)
+      )
 
     # Unused objects
     tped.header.integer <- tped.header.names <- NULL
@@ -359,12 +359,12 @@ read_plink <- function(
     markers.meta %<>%
       dplyr::mutate(
         dplyr::across(
-          .cols = c(CHROM, LOCUS, POS),
+          .cols = c(LOCUS, POS),
           .fns = clean_markers_names
         )
       ) %>%
       dplyr::mutate(
-        MARKERS = stringi::stri_join(CHROM, LOCUS, POS, sep = "__"),
+        MARKERS = make_marker_id(CHROM, LOCUS, POS),
         REF = SeqArray::seqGetData(gdsfile = gds, var.name = "$ref"),
         ALT = SeqArray::seqGetData(gdsfile = gds, var.name = "$alt")
       )

@@ -267,8 +267,8 @@ generate_markers_metadata <- function(
     }
 
     if (!tibble::has_name(markers.meta, "CHROM")) {
-      markers.meta %<>% dplyr::mutate(CHROM = rep("CHROM_1", n.markers))
-      if (verbose) message("CHROM info missing: 'CHROM_1' integer was added to dataset")
+      markers.meta %<>% dplyr::mutate(CHROM = rep("DENOVO", n.markers))
+      if (verbose) message("CHROM info missing: 'DENOVO' was added to the dataset")
     }
 
     # Generate LOCUS info if not present
@@ -309,4 +309,3 @@ generate_markers_metadata <- function(
   }
   return(data)
 }#End generate_markers_metadata
-

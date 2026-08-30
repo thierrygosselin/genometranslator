@@ -375,6 +375,22 @@ The specialized `read_dart()` documentation describes additional DArT columns,
 metadata, and calibration options. Calling `read_dart()` directly is
 recommended when those choices need to be controlled.
 
+### Stable marker identifiers and coordinates
+
+Imported marker metadata deliberately separates identity from genomic placement.
+`MARKERS` is a stable identifier with three components separated by two
+underscores. A de novo marker is written as
+`DENOVO__<LOCUS>__<POS>`. For a reference marker, the exact sequence name is
+kept in `CHROM`, while only the component embedded in `MARKERS` is made safe for
+filenames and downstream code. For example, `CHROM = "NC_054479.1"` is encoded
+as `NC_054479_1` inside `MARKERS`.
+
+Consequently, genomic coordinates must always be taken from the `CHROM` and
+`POS` columns, not reconstructed by splitting `MARKERS`. `LOCUS` retains the
+original DArT/read locus and `COL` retains the SNP position within that source
+sequence. Sanitizing two distinct chromosome names to the same marker component
+is treated as an error rather than silently creating ambiguous identifiers.
+
 ## The generic read and write interface
 
 When format-specific options are not required, `read_genome()` detects the

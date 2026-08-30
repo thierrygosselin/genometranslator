@@ -153,8 +153,8 @@ read_genlight <- function(
     POS = data@position#adegenet::position(data)
   ) %>%
     dplyr::mutate(dplyr::across(tidyselect::everything(), .fns = as.character)) %>%
-    dplyr::mutate(dplyr::across(tidyselect::everything(), .fns = clean_markers_names)) %>%
-    tidyr::unite(data = ., col = MARKERS, CHROM, LOCUS, POS, sep = "__", remove = FALSE) %>%
+    dplyr::mutate(dplyr::across(c(LOCUS, POS), .fns = clean_markers_names)) %>%
+    dplyr::mutate(MARKERS = make_marker_id(CHROM, LOCUS, POS)) %>%
     dplyr::select(MARKERS, CHROM, LOCUS, POS)
 
   # Nuc info
