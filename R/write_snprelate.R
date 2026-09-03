@@ -1,6 +1,6 @@
 # write_snprelate --------------------------------------------------------------
 #' @name write_snprelate
-#' @title Write a SNPRelate object from a tidy data frame
+#' @title Write a SNPRelate file
 #' @section Dependencies:
 #' Required package dependencies are declared in DESCRIPTION and installed
 #' with genometranslator. Run `genometranslator_dependencies()` to inspect

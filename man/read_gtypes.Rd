@@ -2,7 +2,7 @@
 % Please edit documentation in R/gtypes.R
 \name{read_gtypes}
 \alias{read_gtypes}
-\title{Read a gtypes object into a tidy data frame}
+\title{Read a gtypes object}
 \usage{
 read_gtypes(data, verbose = FALSE)
 }
@@ -12,11 +12,15 @@ read_gtypes(data, verbose = FALSE)
 \item{verbose}{Logical indicating whether progress messages are emitted.
 Default: \code{verbose = FALSE}.}
 }
+\value{
+A tibble with \code{STRATA}, \code{INDIVIDUALS}, \code{MARKERS}, and
+six-digit \code{GT}. Nucleotide alleles use a stable A/C/G/T mapping, numeric
+alleles retain their values, and other labels are encoded within each locus.
+}
 \description{
-Transform a \href{https://github.com/EricArcher/strataG}{strataG gtypes}
-object into a tidy data frame.
-Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
-and might be of interest for users.
+Import a diploid \pkg{strataG} \code{gtypes} object and
+standardize its sample, stratum, locus, and allele fields as a tidy genotype
+table. Required data-slot columns and diploid allele counts are validated.
 }
 \section{Dependencies}{
 
@@ -27,8 +31,23 @@ core packages, optional packages, and external executables.
 \code{gtypes} support requires the optional GitHub package
 \href{https://github.com/EricArcher/strataG}{\pkg{strataG}}. Consult its
 repository for current installation and troubleshooting information.
+
+
+Required package dependencies are declared in \code{DESCRIPTION} and are
+installed with \pkg{genometranslator}. Any additional dependency needed only
+for this format or option is identified in this help page. Use
+\code{genometranslator_dependencies()} to inspect the availability of core
+packages, optional packages, and external executables.
 }
 
+\examples{
+\dontrun{
+if (requireNamespace("strataG", quietly = TRUE)) {
+  x <- readRDS("genotypes.gtypes.rds")
+  genotypes <- genometranslator::read_gtypes(x)
+}
+}
+}
 \references{
 Archer FI, Adams PE, Schneiders BB.
 strataG: An r package for manipulating, summarizing and analysing population

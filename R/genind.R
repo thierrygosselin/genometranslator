@@ -1,6 +1,6 @@
 # read_genind ------------------------------------------------------------------
 #' @name read_genind
-#' @title Read a genind object to a GDS or tidy dataframe
+#' @title Read a genind object
 #' @section Dependencies:
 #' Required package dependencies are declared in DESCRIPTION and installed
 #' with genometranslator. Run `genometranslator_dependencies()` to inspect
@@ -8,10 +8,10 @@
 #'
 #' Reading and writing \code{genind} objects requires the optional CRAN package
 #' \href{https://cran.r-project.org/package=adegenet}{\pkg{adegenet}}.
-#' @description Read a genind object or file from
-#' \href{https://github.com/thibautjombart/adegenet}{adegenet} to a tidy dataframe.
-#' Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
-#' and might be of interest for users.
+#' @description Import an \pkg{adegenet} \code{genind} object, standardize its
+#' sample and locus information, and optionally produce tidy genomic data or a
+#' GDS representation. Diploid biallelic and multiallelic objects are supported;
+#' GDS generation is currently limited to biallelic data.
 
 #' @param data (path or object) A genind object in the global environment or
 #' path to a genind file that will be open with \code{readRDS}.
@@ -19,12 +19,11 @@
 #' @param tidy (logical) Generate a tidy dataset.
 #' Default: \code{tidy = TRUE}.
 
-#' @param gds (optional, logical) To write a radiator gds object.
+#' @param gds Logical. Generate a genometranslator GDS representation.
 #' Currently, for biallelic datasets only.
 #' Default: \code{gds = TRUE}.
 
-#' @param write (optional, logical) To write in the working directory the tidy
-#' data. The file is written with \code{radiator_genind_DATE@TIME.rad}.
+#' @param write Logical. Write the tidy table as an Arrow/Parquet file.
 #' Default: \code{write = FALSE}.
 
 #' @note \href{https://github.com/thibautjombart/adegenet}{genind} objects, like
@@ -48,6 +47,17 @@
 #' 
 #' @export
 #' @rdname read_genind
+#' @return With \code{tidy = TRUE}, a tidy tibble. With
+#' \code{tidy = FALSE, gds = TRUE}, the generated GDS result. With both options
+#' false, the original \code{genind} object. Multiallelic input disables GDS
+#' generation and returns tidy data when requested.
+#' @examples
+#' \dontrun{
+#' if (requireNamespace("adegenet", quietly = TRUE)) {
+#'   data("nancycats", package = "adegenet")
+#'   cats <- genometranslator::read_genind(nancycats, gds = FALSE)
+#' }
+#' }
 #' @references Jombart T (2008) adegenet: a R package for the multivariate
 #' analysis of genetic markers. Bioinformatics, 24, 1403-1405.
 #' @references Jombart T, Ahmed I (2011) adegenet 1.3-1:
@@ -56,6 +66,7 @@
 
 
 #' @author Thierry Gosselin \email{thierrygosselin@@icloud.com}
+#' @template io-dependencies
 
 
 read_genind <- function(
@@ -82,9 +93,14 @@ read_genind <- function(
   if (verbose) cli::cli_progress_step("Reading genind")
 
   # Checking for missing and/or default arguments ------------------------------
-  if (missing(data)) rlang::abort("data argument required")
-  if (is.vector(data)) data <- readRDS(data)
-  if (class(data)[1] != "genind") rlang::abort("Input is not a genind object")
+  if (missing(data)) rlang::abort("A genind object or RDS file is required.")
+  if (is.character(data) && length(data) == 1L) {
+    if (!file.exists(data)) rlang::abort("The genind RDS file does not exist.")
+    data <- readRDS(data)
+  }
+  if (!inherits(data, "genind")) rlang::abort("Input is not a genind object.")
+  original.data <- data
+  requested.tidy <- isTRUE(tidy)
 
 
   # Working on individuals and strata ------------------------------------------
@@ -198,8 +214,13 @@ read_genind <- function(
         ) %>%
         dplyr::left_join(strata, by = "INDIVIDUALS")
 
-      check.alleles <- unique(stringi::stri_detect_regex(str = unique(data$ALLELES), pattern = "[0-9]"))
-      if (!check.alleles) data %<>% dplyr::mutate(ALLELES = as.numeric(factor(ALLELES)))
+      numeric.alleles <- stringi::stri_detect_regex(
+        str = unique(data$ALLELES),
+        pattern = "^[0-9]+$"
+      )
+      if (!all(numeric.alleles)) {
+        data %<>% dplyr::mutate(ALLELES = as.numeric(factor(ALLELES)))
+      }
       data %<>%
         dplyr::mutate(ALLELES = stringi::stri_pad_left(str = ALLELES, pad = "0", width = 3)) %>%
         dplyr::filter(is.na(COUNT) | COUNT != 0)
@@ -276,14 +297,16 @@ read_genind <- function(
     )
   }# End gds genind
 
-  return(data)
+  if (requested.tidy) return(data)
+  if (gds) return(gds.filename)
+  return(original.data)
 } # End read_genind
 
 
 # write_genind ------------------------------------------------------------------
 
 #' @name write_genind
-#' @title Write a genind object from a tidy data frame or GDS file or object.
+#' @title Write a genind object
 #' @section Dependencies:
 #' Required package dependencies are declared in DESCRIPTION and installed
 #' with genometranslator. Run `genometranslator_dependencies()` to inspect

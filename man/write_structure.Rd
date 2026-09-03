@@ -2,7 +2,7 @@
 % Please edit documentation in R/write_structure.R
 \name{write_structure}
 \alias{write_structure}
-\title{Write a structure file from a tidy data frame}
+\title{Write a STRUCTURE file}
 \usage{
 write_structure(data, pop.levels = NULL, filename = NULL, ...)
 }

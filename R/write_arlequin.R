@@ -1,7 +1,7 @@
 # write an Arlequin file from a tidy data frame
 
 #' @name write_arlequin
-#' @title Write an arlequin file from a tidy data frame
+#' @title Write an Arlequin file
 #' @description Write a arlequin file from a tidy data frame.
 #' Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
 #' and \href{https://github.com/thierrygosselin/assigner}{assigner}

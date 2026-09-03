@@ -2,8 +2,7 @@
 % Please edit documentation in R/write_bayescan.R
 \name{write_bayescan}
 \alias{write_bayescan}
-\title{Write a \href{http://cmpg.unibe.ch/software/BayeScan/}{BayeScan}
-file from a tidy data frame}
+\title{Write a BayeScan file}
 \usage{
 write_bayescan(
   data,

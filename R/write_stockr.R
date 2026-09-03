@@ -1,6 +1,6 @@
 # write a stockR data set
 #' @name write_stockr
-#' @title Write a stockR dataset from a tidy data frame or GDS file or object.
+#' @title Write a stockR dataset
 
 #' @description Write a stockR dataset (Fost et al. submitted).
 #' Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}

@@ -2,7 +2,7 @@
 
 #' @name write_related
 
-#' @title Write a related file from a tidy data frame
+#' @title Write a related file
 
 #' @description Write a related file from a tidy data frame.
 #' This output file format enables to run the data in the

@@ -1,16 +1,104 @@
+# PLINK helpers ----------------------------------------------------------------
+
+.plink2_path <- function(plink.path = NULL) {
+  candidates <- if (is.null(plink.path)) c("plink2", "plink") else plink.path
+  paths <- Sys.which(candidates)
+  paths <- unname(paths[nzchar(paths)])
+  if (!length(paths)) {
+    rlang::abort(c(
+      "PLINK 2 is required for this conversion.",
+      "i" = "Install PLINK 2 and place `plink2` on PATH, or supply `plink.path`."
+    ))
+  }
+  version <- suppressWarnings(system2(
+    paths[[1]], "--version", stdout = TRUE, stderr = TRUE
+  ))
+  if (!any(grepl("PLINK v?2|PLINK 2", version, ignore.case = TRUE))) {
+    rlang::abort(c(
+      "The detected executable is not PLINK 2.",
+      "i" = paste(version, collapse = " ")
+    ))
+  }
+  paths[[1]]
+}
+
+.plink_prefix <- function(data, format) {
+  extension <- switch(
+    format,
+    "plink.pgen.file" = "\\.pgen$",
+    "plink.bed.file" = "\\.bed$",
+    "plink.ped.file" = "\\.ped$",
+    "plink.tped.file" = "\\.tped$",
+    rlang::abort(paste0("Unsupported PLINK format: ", format))
+  )
+  sub(extension, "", data, ignore.case = TRUE)
+}
+
+.plink2_input_args <- function(data, format) {
+  prefix <- .plink_prefix(data, format)
+  switch(
+    format,
+    "plink.pgen.file" = c(
+      "--pfile", prefix,
+      if (!file.exists(paste0(prefix, ".pvar")) &&
+          file.exists(paste0(prefix, ".pvar.zst"))) "vzs"
+    ),
+    "plink.bed.file" = c("--bfile", prefix),
+    "plink.ped.file" = c("--file", prefix),
+    "plink.tped.file" = c("--tfile", prefix)
+  )
+}
+
+.run_plink2 <- function(plink.path, args, verbose = TRUE) {
+  output <- system2(
+    command = plink.path,
+    args = vapply(args, shQuote, character(1)),
+    stdout = TRUE,
+    stderr = TRUE
+  )
+  status <- attr(output, "status")
+  if (!is.null(status) && status != 0L) {
+    rlang::abort(c(
+      "PLINK 2 conversion failed.",
+      "i" = paste(utils::tail(output, 12L), collapse = "\n")
+    ))
+  }
+  if (verbose && length(output)) {
+    message(paste(utils::tail(output, 3L), collapse = "\n"))
+  }
+  invisible(output)
+}
+
+.plink_to_vcf <- function(data, format, plink.path = NULL, verbose = TRUE) {
+  executable <- .plink2_path(plink.path)
+  temp.prefix <- tempfile(pattern = "genometranslator_plink_")
+  args <- c(
+    .plink2_input_args(data, format),
+    "--allow-extra-chr",
+    "--export", "vcf",
+    "--out", temp.prefix
+  )
+  .run_plink2(executable, args, verbose = verbose)
+  vcf <- paste0(temp.prefix, ".vcf")
+  if (!file.exists(vcf)) {
+    rlang::abort("PLINK 2 completed without creating the expected VCF file.")
+  }
+  list(vcf = vcf, prefix = temp.prefix)
+}
+
 # Read PLINK -------------------------------------------------------------------
 #' @name read_plink
-#' @title Reads PLINK tped and bed files
+#' @title Read PLINK
 #' @section Dependencies:
 #' Required package dependencies are declared in DESCRIPTION and installed
 #' with genometranslator. Run `genometranslator_dependencies()` to inspect
 #' core packages, optional packages, and external executables.
 #'
 #' Binary BED input uses the declared Bioconductor dependencies \pkg{SeqArray}
-#' and \pkg{gdsfmt}. The external PLINK executable is not required to read or
-#' write the supported PLINK formats.
-#' @description The function reads PLINK tped and bed files.
-#' radiator prefers the use of BED file. These files are converted to
+#' and \pkg{gdsfmt}. PLINK 2 is required to normalize PGEN/PVAR/PSAM,
+#' PED/MAP, and TPED/TFAM input.
+#' @description Read PLINK 1 BED/BIM/FAM, PED/MAP, or TPED/TFAM files and
+#' PLINK 2 PGEN/PVAR/PSAM files. Inputs are converted to
 #' a connection SeqArray \href{https://github.com/zhengxwen/SeqArray}{SeqArray}
 #' GDS object/file of class \code{SeqVarGDSClass} (Zheng et al. 2017).
 #' The Genomic Data Structure (GDS) file format is detailed in
@@ -19,13 +107,18 @@
 #' Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
 #' and might be of interest for users.
 
-#' @param data The PLINK file.
+#' @param data Path to the primary PLINK genotype file: \code{.pgen},
+#' \code{.bed}, \code{.ped}, or \code{.tped}. Companion files with the same
+#' prefix must be present.
 #' \itemize{
-#' \item {bi-allelic data only}. For haplotypes use VCF.
-#' \item \code{tped} file format: the corresponding \code{tfam} file must be in the directory.
-#' \item \code{bed} file format: IS THE PREFERRED format, the corresponding
-#' \code{fam} and \code{bim} files must be in the directory.
+#' \item PLINK 2: \code{pgen/pvar/psam} (\code{pvar.zst} is accepted).
+#' \item PLINK 1 binary: \code{bed/bim/fam}.
+#' \item PLINK 1 text: \code{ped/map} or \code{tped/tfam}.
 #' }
+#' @param strata Optional sample metadata passed to the VCF/GDS importer for
+#' formats normalized with PLINK 2.
+#' @param plink.path Optional path to the PLINK 2 executable. With
+#' \code{NULL}, \code{plink2} and then \code{plink} are searched on PATH.
 
 #' @param filename (optional) The file name of the Genomic Data Structure (GDS) file.
 #' genometranslator will append \code{.gds} to the filename.
@@ -37,13 +130,9 @@
 #' @inheritParams genometranslator_common_arguments
 
 
-#' @details
-#' Large PLINK files will require the use of BED plink format. Look below
-#' in the example for conversion with PLINK.
-#'
-#' Large PLINK bed files will take longer to import and transform in GDS, but
-#' after the file is generated, you can close your computer and
-#' come back to it a month later and it's now a matter of sec to open a connection!
+#' @details BED is imported directly with SeqArray. PGEN, PED, and TPED are
+#' converted to a temporary VCF with PLINK 2 and then imported to GDS. The
+#' temporary conversion files are removed after a successful import.
 
 
 #### To do ....
@@ -69,9 +158,7 @@
 # }
 
 #' @return
-#' For \code{tped} the function returns a list object with the non-modified \code{tped} and
-#' the strata corresponding to the \code{tfam}.
-#' With \code{bed}, the function returns a GDS object.
+#' A writable \code{SeqVarGDSClass} connection for every supported flavour.
 
 #' @export
 #' @rdname read_plink
@@ -91,18 +178,20 @@
 
 #' @examples
 #' \dontrun{
-#' data <- genometranslator::read_plink(data = "my_plink_file.bed")
-#' # when conversion is required from TPED to BED, in Terminal:
-#' # plink --tfile my_plink_file --make-bed --allow-no-sex --allow-extra-chr --chr-set 95
+#' modern <- genometranslator::read_plink("study.pgen")
+#' admixture <- genometranslator::read_plink("study.bed")
+#' legacy <- genometranslator::read_plink("study.tped")
 #' }
 
 #' @seealso
-#' \href{https://www.cog-genomics.org/plink/1.9/}{PLINK}
+#' \href{https://www.cog-genomics.org/plink/2.0/formats}{PLINK 2 formats}
 
 
 read_plink <- function(
   data,
   filename = NULL,
+  strata = NULL,
+  plink.path = NULL,
   parallel.core = parallel::detectCores() - 1,
   verbose = TRUE,
   ...
@@ -129,8 +218,35 @@ read_plink <- function(
   # Warning concerning plink files----------------------------------------------
   plink.format <- genometranslator::detect_genomic_format(data = data)
 
+  # PLINK 2 and PLINK 1 text formats are normalized with the official PLINK 2
+  # engine. This avoids maintaining independent PED/TPED/PGEN parsers and makes
+  # all readers return the same persistent GDS representation.
+  if (plink.format %in% c(
+    "plink.pgen.file", "plink.ped.file", "plink.tped.file"
+  )) {
+    if (verbose) message("Normalizing ", plink.format, " with PLINK 2...")
+    converted <- .plink_to_vcf(
+      data = data,
+      format = plink.format,
+      plink.path = plink.path,
+      verbose = verbose
+    )
+    on.exit(unlink(
+      Sys.glob(paste0(converted$prefix, ".*")),
+      recursive = FALSE,
+      force = TRUE
+    ), add = TRUE)
+    return(genometranslator::read_vcf(
+      data = converted$vcf,
+      strata = strata,
+      filename = filename,
+      parallel.core = parallel.core,
+      verbose = verbose
+    ))
+  }
+
   # PLINK TPED -----------------------------------------------------------------
-  if (plink.format == "plink.tped.file") {
+  if (FALSE && plink.format == "plink.tped.file") {
     message("Reading PLINK tped...")
 
     # Get file size
@@ -560,7 +676,7 @@ tidy_plink <- function(
     parameters = parameters
   )
 
-  if (plink.format == "plink.tped.file") {
+  if (FALSE && plink.format == "plink.tped.file") {
     # Make tidy ------------------------------------------------------------------
     if (verbose) message("Tidying the PLINK tped file ...")
     # Filling GT and new separating INDIVIDUALS from ALLELES
@@ -649,7 +765,10 @@ tidy_plink <- function(
     }
   } #End tidy tped
 
-  if (plink.format == "plink.bed.file") {
+  if (plink.format %in% c(
+    "plink.pgen.file", "plink.bed.file",
+    "plink.ped.file", "plink.tped.file"
+  )) {
     # Get info markers and individuals -----------------------------------------
     gds.info <- genometranslator::summary_gds(gds = data, verbose = FALSE)
     n.markers <- gds.info$n.markers
@@ -684,9 +803,11 @@ tidy_plink <- function(
 # write_plink ------------------------------------------------------------------
 
 #' @name write_plink
-#' @title Write a plink tped/tfam file from a tidy data frame
+#' @title Write PLINK
 
-#' @description Write a plink file from a tidy data frame.
+#' @description Export genomic data to PLINK 2 PGEN/PVAR/PSAM or PLINK 1
+#' BED/BIM/FAM, PED/MAP, or TPED/TFAM. The active data are first represented as
+#' VCF and the official PLINK 2 engine creates the requested fileset.
 #' Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
 #' and \href{https://github.com/thierrygosselin/assigner}{assigner}
 #' and might be of interest for users.
@@ -696,11 +817,37 @@ tidy_plink <- function(
 #' \emph{How to get a tidy data frame ?}
 #' Look into \pkg{genometranslator} \code{\link{tidy_genome}}.
 
-#' @param filename (optional) The file name prefix for tped/tfam files
-#' written to the working directory. With default: \code{filename = NULL},
-#' the date and time is appended to \code{radiator_plink_}.
-
-#' Default: \code{filename = NULL}.
+#' @param filename Output prefix without a PLINK extension. With
+#' \code{NULL}, a timestamped prefix is created in \code{path.folder}.
+#' @param format Output flavour: \code{"pgen"} (PGEN/PVAR/PSAM),
+#' \code{"bed"} (BED/BIM/FAM), \code{"ped"} (PED/MAP), or \code{"tped"}
+#' (TPED/TFAM). Default: \code{"pgen"}.
+#' @param path.folder Output directory. Default: current working directory.
+#' @param plink.path Optional path to PLINK 2. With \code{NULL}, executable
+#' names \code{plink2} and then \code{plink} are searched on PATH.
+#' @param plink.args Additional PLINK 2 command-line arguments. These are
+#' appended before \code{--out}; use only documented PLINK 2 flags.
+#' @param overwrite Logical. Permit replacement of an existing fileset.
+#' Default: \code{FALSE}.
+#' @param verbose Logical. Print PLINK 2 progress. Default: \code{TRUE}.
+#' @details PGEN is the recommended general PLINK output. BED is useful for
+#' ADMIXTURE and other software that expects PLINK 1 binary input. PED and TPED
+#' are uncompressed legacy exchange formats. BED, PED, and TPED workflows should
+#' normally use filtered biallelic markers; this function does not silently
+#' remove unsuitable variants.
+#' @return Invisibly, the paths of every file in the generated PLINK fileset.
+#' @examples
+#' \dontrun{
+#' # Modern PLINK 2 files
+#' genometranslator::write_plink(genome, "study", format = "pgen")
+#'
+#' # PLINK 1 binary files for ADMIXTURE and legacy pipelines
+#' genometranslator::write_plink(genome, "study_admixture", format = "bed")
+#'
+#' # Text-based legacy exports
+#' genometranslator::write_plink(genome, "study", format = "ped")
+#' genometranslator::write_plink(genome, "study", format = "tped")
+#' }
 #' @export
 #' @rdname write_plink
 #' @references Purcell S, Neale B, Todd-Brown K, Thomas L, Ferreira MAR,
@@ -714,90 +861,103 @@ tidy_plink <- function(
 #' @template writer-filtering
 #' @template io-dependencies
 
-write_plink <- function(data, filename = NULL) {
-
-  # Import data ---------------------------------------------------------------
-  if (is.vector(data)) data %<>% genometranslator::read_genome(data = ., import.metadata = TRUE)
-  tped <- data %>%
-    dplyr::arrange(INDIVIDUALS) %>%
-    dplyr::mutate(
-      COL1 = rep("0", n()),
-      COL3 = rep("0", n()),
-      COL4 = rep("0", n())
-    )
-  if (rlang::has_name(data, "GT")) {
-    tped %<>%
-      dplyr::select(COL1, MARKERS, COL3, COL4, INDIVIDUALS, GT) %>%
-      dplyr::mutate(
-        A1 = stringi::stri_sub(str = GT, from = 1, to = 3),
-        A2 = stringi::stri_sub(str = GT, from = 4, to = 6)
-      ) %>%
-      dplyr::select(-GT) %>%
-      tgbase::trans_long(
-        x = .,
-        cols = c("COL1", "MARKERS", "COL3", "COL4", "INDIVIDUALS"),
-        names_to = "ALLELES",
-        values_to = "GENOTYPE"
-      ) %>%
-      dplyr::mutate(
-        GENOTYPE = as.character(as.numeric(GENOTYPE)),
-        GENOTYPE = stringi::stri_pad_left(GENOTYPE, width = 2, pad = "0")
-      ) %>%
-      dplyr::arrange(INDIVIDUALS, ALLELES)
+write_plink <- function(
+    data,
+    filename = NULL,
+    format = c("pgen", "bed", "ped", "tped"),
+    path.folder = getwd(),
+    plink.path = NULL,
+    plink.args = character(),
+    overwrite = FALSE,
+    verbose = TRUE
+) {
+  format <- match.arg(format)
+  if (!dir.exists(path.folder)) {
+    dir.create(path.folder, recursive = TRUE, showWarnings = FALSE)
   }
+  path.folder <- normalizePath(path.folder, mustWork = TRUE)
 
-  if (rlang::has_name(data, "ALT_DOSAGE")) {
-    tped %<>%
-      dplyr::select(COL1, MARKERS, COL3, COL4, INDIVIDUALS, ALT_DOSAGE) %>%
-      dplyr::mutate(
-        A1 = dplyr::case_when(
-          ALT_DOSAGE == 0 ~ "01",
-          ALT_DOSAGE == 1 ~ "01",
-          ALT_DOSAGE == 2 ~ "00",
-          is.na(ALT_DOSAGE) ~ "00"
-        ),
-        A2 = dplyr::case_when(
-          ALT_DOSAGE == 0 ~ "00",
-          ALT_DOSAGE == 1 ~ "01",
-          ALT_DOSAGE == 2 ~ "01",
-          is.na(ALT_DOSAGE) ~ "00"
-        )
-      ) %>%
-      dplyr::select(-ALT_DOSAGE) %>%
-      tgbase::trans_long(
-        x = .,
-        cols = c("COL1", "MARKERS", "COL3", "COL4", "INDIVIDUALS"),
-        names_to = "ALLELES",
-        values_to = "GENOTYPE"
-      )
-  }
-
-  tped %<>%
-    tidyr::unite(INDIVIDUALS_ALLELES, INDIVIDUALS, ALLELES, sep = "_") %>%
-    tgbase::trans_wide(x = ., formula = "COL1 + MARKERS +COL3 + COL4 ~ INDIVIDUALS_ALLELES", values_from = "GENOTYPE") %>%
-    dplyr::arrange(MARKERS)
-
-  tfam <- dplyr::distinct(.data = data, STRATA, INDIVIDUALS) %>%
-    dplyr::arrange(INDIVIDUALS) %>%
-    dplyr::mutate(
-      COL3 = rep("0",n()),
-      COL4 = rep("0",n()),
-      COL5 = rep("0",n()),
-      COL6 = rep("-9",n())
-    )
-
-  # Create a filename to save the output files ********************************
   if (is.null(filename)) {
-    # Get date and time to have unique filenaming
-    file.date <- stringi::stri_replace_all_fixed(Sys.time(), pattern = " EDT", replacement = "", vectorize_all = FALSE)
-    file.date <- stringi::stri_replace_all_fixed(file.date, pattern = c("-", " ", ":"), replacement = c("", "@", ""), vectorize_all = FALSE)
-    file.date <- stringi::stri_sub(file.date, from = 1, to = 13)
-    filename.tped <- stringi::stri_join("radiator_plink_", file.date, ".tped")
-    filename.tfam <- stringi::stri_join("radiator_plink_", file.date, ".tfam")
-  } else {
-    filename.tped <- stringi::stri_join(filename, ".tped")
-    filename.tfam <- stringi::stri_join(filename, ".tfam")
+    filename <- paste0(
+      "genometranslator_plink_",
+      base::format(Sys.time(), "%Y%m%d@%H%M%S")
+    )
   }
-  readr::write_delim(x = tped, file = filename.tped, col_names = FALSE, delim = " ")
-  readr::write_delim(x = tfam, file = filename.tfam, col_names = FALSE, delim = " ")
+  filename <- basename(sub(
+    "\\.(pgen|pvar|psam|bed|bim|fam|ped|map|tped|tfam)$",
+    "", filename, ignore.case = TRUE
+  ))
+  output.prefix <- file.path(path.folder, filename)
+  extensions <- switch(
+    format,
+    pgen = c(".pgen", ".pvar", ".psam"),
+    bed = c(".bed", ".bim", ".fam"),
+    ped = c(".ped", ".map"),
+    tped = c(".tped", ".tfam")
+  )
+  output.files <- paste0(output.prefix, extensions)
+  existing <- output.files[file.exists(output.files)]
+  if (length(existing) && !overwrite) {
+    rlang::abort(c(
+      "The requested PLINK fileset already exists.",
+      "i" = paste(basename(existing), collapse = ", "),
+      "i" = "Use a different `filename` or set `overwrite = TRUE`."
+    ))
+  }
+
+  executable <- .plink2_path(plink.path)
+  temp.prefix <- tempfile(pattern = "genometranslator_write_plink_")
+  vcf <- paste0(temp.prefix, ".vcf")
+  opened.gds <- NULL
+
+  if (inherits(data, "SeqVarGDSClass")) {
+    SeqArray::seqGDS2VCF(data, vcf.fn = vcf, verbose = verbose)
+  } else if (is.character(data) && length(data) == 1L &&
+             grepl("\\.gds$", data, ignore.case = TRUE)) {
+    opened.gds <- genometranslator::read_genome(data, verbose = FALSE)
+    on.exit(SeqArray::seqClose(opened.gds), add = TRUE)
+    SeqArray::seqGDS2VCF(opened.gds, vcf.fn = vcf, verbose = verbose)
+  } else if (is.character(data) && length(data) == 1L &&
+             grepl("\\.vcf(?:\\.gz)?$", data, ignore.case = TRUE)) {
+    vcf <- normalizePath(data, mustWork = TRUE)
+  } else {
+    genometranslator::write_vcf(data = data, filename = temp.prefix)
+  }
+
+  if (!file.exists(vcf)) {
+    rlang::abort("Unable to create the intermediate VCF for PLINK export.")
+  }
+  if (startsWith(vcf, tempdir())) {
+    on.exit(unlink(vcf, force = TRUE), add = TRUE)
+  }
+
+  action <- switch(
+    format,
+    pgen = c("--make-pgen"),
+    bed = c("--make-bed"),
+    ped = c("--export", "ped"),
+    tped = c("--export", "tped")
+  )
+  args <- c(
+    "--vcf", vcf,
+    "--allow-extra-chr",
+    action,
+    as.character(plink.args),
+    "--out", output.prefix
+  )
+  args <- args[nzchar(args)]
+  .run_plink2(executable, args, verbose = verbose)
+
+  generated <- output.files[file.exists(output.files)]
+  if (length(generated) != length(output.files)) {
+    rlang::abort(c(
+      "PLINK 2 did not create the complete requested fileset.",
+      "i" = paste("Expected:", paste(basename(output.files), collapse = ", "))
+    ))
+  }
+  if (verbose) {
+    message("PLINK ", toupper(format), " files written:")
+    message(paste0("  ", generated, collapse = "\n"))
+  }
+  invisible(generated)
 } # end write_plink

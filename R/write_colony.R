@@ -1,7 +1,7 @@
 # From STACKS haplotypes file write COLONY input files to the working directory
 
 #' @name write_colony
-#' @title Write a \code{COLONY} input file
+#' @title Write a COLONY file
 #' @description Write a \code{COLONY} input file.
 
 #' @inheritParams genometranslator_common_arguments
@@ -536,7 +536,6 @@ radiator_colony <- function(
     readr::write_file(x = excluded.maternal.siblings.opt, file = filename, append = TRUE)
   }
 }# End radiator_colony
-
 
 
 

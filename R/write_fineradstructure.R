@@ -1,7 +1,7 @@
 # write a fineradstructure file from a tidy data frame
 
 #' @name write_fineradstructure
-#' @title Write a fineRADstructure file from a tidy data frame
+#' @title Write a fineRADstructure file
 
 #' @description Write a \href{https://github.com/millanek/fineRADstructure}{fineRADstructure}
 #' file from a tidy data frame.
@@ -72,8 +72,8 @@ write_fineradstructure <- function(data, strata = NULL, filename = NULL) {
   if (is.null(strata)) {
     strata <- genometranslator::generate_strata(data = data, pop.id = TRUE)
   } else {
-    strata <- genometranslator::read_strata(strata = strata, pop.id = TRUE) %$%
-      strata
+    strata <- genometranslator::read_strata(strata = strata) %$%
+      dplyr::rename(strata, POP_ID = STRATA)
   }
 
   # unique(strata$POP_ID)

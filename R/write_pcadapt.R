@@ -1,8 +1,7 @@
 # write a pcadapt file from a tidy data frame
 
 #' @name write_pcadapt
-#' @title Write a \href{https://github.com/bcm-uga/pcadapt}{pcadapt}
-#' file from a tidy data frame
+#' @title Write a pcadapt file
 
 #' @description Write a
 #' \href{https://github.com/bcm-uga/pcadapt}{pcadapt}

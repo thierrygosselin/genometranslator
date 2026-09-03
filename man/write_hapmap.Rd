@@ -2,7 +2,7 @@
 % Please edit documentation in R/write_hapmap.R
 \name{write_hapmap}
 \alias{write_hapmap}
-\title{Write a HapMap file from a tidy data frame}
+\title{Write a HapMap file}
 \usage{
 write_hapmap(data, filename = NULL)
 }

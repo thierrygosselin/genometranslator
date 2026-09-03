@@ -2,7 +2,7 @@
 % Please edit documentation in R/write_ldna.R
 \name{write_ldna}
 \alias{write_ldna}
-\title{Write a LDna object from a tidy data frame}
+\title{Write an LDna object}
 \usage{
 write_ldna(
   data,

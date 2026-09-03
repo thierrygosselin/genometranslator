@@ -2,7 +2,7 @@
 % Please edit documentation in R/genepop.R
 \name{write_genepop}
 \alias{write_genepop}
-\title{Write a genepop file}
+\title{Write a Genepop file}
 \usage{
 write_genepop(
   data,

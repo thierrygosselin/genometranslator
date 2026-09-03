@@ -2,7 +2,7 @@
 
 #' @name write_gsi_sim
 
-#' @title Write a gsi_sim file from a data frame (wide or long/tidy).
+#' @title Write a gsi_sim file
 
 #' @description Write a gsi_sim file from a data frame (wide or long/tidy).
 #' Used internally in \href{https://github.com/thierrygosselin/assigner}{assigner} and
@@ -137,7 +137,6 @@ write_gsi_sim <- function(
   } else {
     strata <- genometranslator::read_strata(
       strata = strata,
-      pop.id = TRUE,
       pop.levels = pop.levels,
       pop.labels = pop.labels,
       verbose = FALSE) %$%
@@ -173,4 +172,3 @@ write_gsi_sim <- function(
   gsi_sim.split <- data <- pop <- pop.string <- NULL
   return(filename)
 } # End write_gsi function
-

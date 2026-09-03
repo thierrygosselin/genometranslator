@@ -2,7 +2,7 @@
 % Please edit documentation in R/write_faststructure.R
 \name{write_faststructure}
 \alias{write_faststructure}
-\title{Write a faststructure file from a tidy data frame}
+\title{Write a fastSTRUCTURE file}
 \usage{
 write_faststructure(
   data,

@@ -2,7 +2,7 @@
 % Please edit documentation in R/genepop.R
 \name{read_genepop}
 \alias{read_genepop}
-\title{Read a Genepop file into a tidy or wide data frame}
+\title{Read a Genepop file}
 \usage{
 read_genepop(
   data,
@@ -13,8 +13,8 @@ read_genepop(
 )
 }
 \arguments{
-\item{data}{A \href{https://genepop.curtin.edu.au/help_input.html}{genepop}
-filename with extension \code{.gen}.}
+\item{data}{Path to a Genepop file, commonly with extension \code{.gen}, or a
+one-column data frame containing its lines.}
 
 \item{strata}{(optional) A tab delimited file with 2 columns. Header:
 \code{INDIVIDUALS} and \code{STRATA}.
@@ -38,21 +38,19 @@ Default: \code{filename = NULL}.}
 Default: \code{verbose = FALSE}.}
 }
 \value{
-The output in your global environment is a wide or long/tidy data frame.
-If \code{filename} is provided, the wide or long/tidy data frame is also
-written to the working directory.
+A tibble in long form with \code{STRATA}, \code{INDIVIDUALS},
+\code{MARKERS}, and six-digit \code{GT}, or wide form when
+\code{tidy = FALSE}. If duplicate individual names are replaced, the
+original-to-generated mapping is stored in the \code{id_conversion}
+attribute. If \code{filename} is supplied, the table is also written as a
+tab-separated file.
 }
 \description{
-Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
-and might be of interest for users.
-The function \code{read_genepop} reads a file in the
-\href{https://genepop.curtin.edu.au/help_input.html}{genepop format}
-(see details and note for convention) and output a data frame in wide or long/tidy format.
-
-To manipulate and prune the dataset prior to tidying, use the functions
-\code{\link{tidy_genome}} and
-\code{\link{genome_translator}}, that uses blacklist and whitelist along
-several other filtering options.
+Import and validate diploid data in the Genepop text format.
+Both comma-separated locus names and one-locus-per-line headers are accepted,
+as are one-, two-, and three-digit allele codes. Population blocks, unique
+locus names, genotype-row widths, and genotype coding are checked before a
+long or wide tibble is returned.
 }
 \details{
 \href{https://genepop.curtin.edu.au/help_input.html}{genepop format}
@@ -123,8 +121,17 @@ you should remove both their names and the corresponding genotypes.
 that you have several important genotypes and markers metadata
 (chromosome, locus, snp, position, read depth, allele depth, etc.) available,
 these are all lacking in the genepop format. This format is kept for archival
-reasons in radiator.
+reasons and data exchange. VCF or GDS should be preferred when sequencing
+likelihoods, depth, alleles, coordinates, and other metadata must be retained.
 }
+\section{Field handling}{
+
+Genepop population blocks become \code{STRATA}; cleaned sample names become
+\code{INDIVIDUALS}; locus names become \code{MARKERS}; and each allele is
+padded to three digits. Supplied strata metadata replaces embedded population
+blocks and must contain every Genepop individual.
+}
+
 \section{Dependencies}{
 
 Required package dependencies are declared in \code{DESCRIPTION} and are
@@ -137,7 +144,7 @@ packages, optional packages, and external executables.
 \examples{
 \dontrun{
 # We will use the genepop dataset provided with adegenet package
-require("adegenet")
+if (requireNamespace("adegenet", quietly = TRUE)) {
 
 # The simplest form of the function:
 nancycats.tidy <- genometranslator::read_genepop(
@@ -155,6 +162,7 @@ nancycats.wide <- genometranslator::read_genepop(
 ),
     tidy = FALSE
 )
+}
 }
 }
 \references{

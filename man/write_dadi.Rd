@@ -2,7 +2,7 @@
 % Please edit documentation in R/write_dadi.R
 \name{write_dadi}
 \alias{write_dadi}
-\title{Write a \code{dadi} SNP input file from a tidy data frame.}
+\title{Write a dadi file}
 \usage{
 write_dadi(
   data,

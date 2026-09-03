@@ -1,6 +1,6 @@
 # write_rubias ---------------------------------------------------------------
 
-#' Write data in rubias format
+#' Write a rubias file
 #'
 #' @description Convert a supported genomic dataset to the diploid,
 #' two-column-per-locus data frame used by \pkg{rubias}. The first four columns

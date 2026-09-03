@@ -2,7 +2,7 @@
 % Please edit documentation in R/genlight.R
 \name{read_genlight}
 \alias{read_genlight}
-\title{Read a genlight object into a tidy data frame and/or GDS object/file}
+\title{Read a genlight object}
 \usage{
 read_genlight(
   data,
@@ -20,11 +20,10 @@ path to a genlight file that will be open with \code{readRDS}.}
 \item{tidy}{(logical) Generate a tidy dataset.
 Default: \code{tidy = TRUE}.}
 
-\item{gds}{(optional, logical) To write a radiator gds object.
+\item{gds}{Logical. Generate a genometranslator GDS representation.
 Default: \code{gds = TRUE}.}
 
-\item{write}{(optional, logical) To write in the working directory the tidy
-data. The file is written with \code{radiator_genlight_DATE@TIME.rad}.
+\item{write}{Logical. Write the tidy table as an Arrow/Parquet file.
 Default: \code{write = FALSE}.}
 
 \item{verbose}{Logical indicating whether progress messages are emitted.
@@ -33,25 +32,31 @@ Default: \code{verbose = FALSE}.}
 \item{parallel.core}{Number of workers available for parallel operations.
 Default: \code{parallel.core = parallel::detectCores() - 1}.}
 }
+\value{
+With \code{tidy = TRUE}, a tidy tibble. With
+\code{tidy = FALSE, gds = TRUE}, the generated GDS result. With both options
+false, the original \code{genlight} object.
+}
 \description{
-Read a genlight object into a tidy data frame and/or GDS object/file.
-Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
-and might be of interest for users.
+Import an \pkg{adegenet} \code{genlight} object, standardize its
+sample and marker metadata, and optionally produce tidy genomic data or a GDS
+representation.
 }
 \details{
-A string of the same dimension is generated when genlight:
+Missing marker fields are generated when necessary:
 \enumerate{
 \item \code{is.null(genlight@pop)}: pop will be integrated
 in the tidy dataset.
-\item \code{is.null(data@chromosome)}: CHROM1 will be integrated
+\item \code{is.null(data@chromosome)}: \code{DENOVO} is used
 in the tidy dataset.
 \item \code{is.null(data@loc.names)}: LOCUS1 to \code{ncol(genlight)}
 will be integrated in the tidy dataset.
 \item \code{is.null(data@position)}: an integer string of
 length = \code{ncol(genlight)} will be integrated in the tidy dataset.
 }
-
-\strong{Note: that if all CHROM, LOCUS and POS is missing the function will be terminated}
+Generated fields preserve a unique marker identifier but do not create
+reference-genome coordinates. When \code{loc.all} is unavailable, symbolic
+\code{REF = "0"} and \code{ALT = "1"} labels preserve the dosage orientation.
 }
 \section{Dependencies}{
 
@@ -61,8 +66,23 @@ core packages, optional packages, and external executables.
 
 Reading and writing \code{genlight} objects requires the optional CRAN
 package \href{https://cran.r-project.org/package=adegenet}{\pkg{adegenet}}.
+
+
+Required package dependencies are declared in \code{DESCRIPTION} and are
+installed with \pkg{genometranslator}. Any additional dependency needed only
+for this format or option is identified in this help page. Use
+\code{genometranslator_dependencies()} to inspect the availability of core
+packages, optional packages, and external executables.
 }
 
+\examples{
+\dontrun{
+if (requireNamespace("adegenet", quietly = TRUE)) {
+  x <- readRDS("genotypes.genlight.rds")
+  genotypes <- genometranslator::read_genlight(x, gds = FALSE)
+}
+}
+}
 \references{
 Jombart T (2008) adegenet: a R package for the multivariate
 analysis of genetic markers. Bioinformatics, 24, 1403-1405.

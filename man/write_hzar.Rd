@@ -2,7 +2,7 @@
 % Please edit documentation in R/write_hzar.R
 \name{write_hzar}
 \alias{write_hzar}
-\title{Write a HZAR file from a tidy data frame.}
+\title{Write an HZAR file}
 \usage{
 write_hzar(
   data,

@@ -21,8 +21,44 @@ knitr::opts_chunk$set(
 <!-- badges: end -->
 
 `genometranslator` reads, standardizes, and writes individual genomic data. The
-easiest interface is `read_genome` and `write_genome`; use a format-specific
-`read_*` or `write_*` function when more control is needed.
+easiest interface is `read_genome()` and `write_genome()`; use a format-specific
+`read_*()` or `write_*()` function when more control is needed. Large genomic
+datasets remain in a file-backed GDS rather than being expanded into an R data
+frame unless that conversion is requested explicitly.
+
+## Quick start
+
+`read_genome()` detects VCF, DArT, PLINK, FSTAT, Genepop, GDS, and supported R
+genomic objects and dispatches to the corresponding reader:
+
+```{r quick-start, eval=FALSE}
+genome <- genometranslator::read_genome(
+  data = "individuals.vcf.gz",
+  strata = "strata.tsv"
+)
+```
+
+For VCF-specific controls, call `read_vcf()` directly. Both interfaces return
+an open SeqArray GDS object:
+
+```{r read-vcf, eval=FALSE}
+genome <- genometranslator::read_vcf(
+  data = "individuals.vcf.gz",
+  strata = "strata.tsv",
+  filename = "individuals"
+)
+```
+
+Use `tidy_genome()` only when an in-memory table is genuinely needed:
+
+```{r tidy-genome, eval=FALSE}
+genotypes <- genometranslator::tidy_genome(data = genome)
+```
+
+The former `tidy_vcf()` wrapper has been removed. Its import responsibilities
+belong to `read_genome()` and `read_vcf()`, while filtering belongs in `radr`.
+The historical implementation remains available in `radiator` for legacy
+workflows.
 
 ## Installation
 

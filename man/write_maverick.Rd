@@ -2,7 +2,7 @@
 % Please edit documentation in R/write_maverick.R
 \name{write_maverick}
 \alias{write_maverick}
-\title{Write a maverick file from a tidy data frame}
+\title{Write a MavericK file}
 \usage{
 write_maverick(data, filename = NULL, ...)
 }

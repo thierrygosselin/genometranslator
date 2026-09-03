@@ -2,7 +2,7 @@
 % Please edit documentation in R/vcf.R
 \name{write_vcf}
 \alias{write_vcf}
-\title{Write a vcf file from a tidy data frame}
+\title{Write a VCF file}
 \usage{
 write_vcf(data, strata = FALSE, filename = NULL, source = NULL, empty = FALSE)
 }

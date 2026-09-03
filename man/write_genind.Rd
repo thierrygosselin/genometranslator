@@ -2,7 +2,7 @@
 % Please edit documentation in R/genind.R
 \name{write_genind}
 \alias{write_genind}
-\title{Write a genind object from a tidy data frame or GDS file or object.}
+\title{Write a genind object}
 \usage{
 write_genind(data, write = FALSE, verbose = FALSE)
 }

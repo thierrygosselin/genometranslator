@@ -2,7 +2,7 @@
 % Please edit documentation in R/write_related.R
 \name{write_related}
 \alias{write_related}
-\title{Write a related file from a tidy data frame}
+\title{Write a related file}
 \usage{
 write_related(
   data,

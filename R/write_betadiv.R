@@ -2,7 +2,7 @@
 
 #' @name write_betadiv
 
-#' @title Write a betadiv file from a tidy data frame
+#' @title Write a betadiv file
 
 #' @description Write a betadiv file from a tidy data frame.
 #' Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
@@ -66,4 +66,3 @@ write_betadiv <- function(data) {
     dplyr::mutate(POP_ID = as.integer(POP_ID))
   return(betadiv)
 } # end write_betadiv
-

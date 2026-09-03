@@ -2,7 +2,7 @@
 % Please edit documentation in R/write_colony.R
 \name{write_colony}
 \alias{write_colony}
-\title{Write a \code{COLONY} input file}
+\title{Write a COLONY file}
 \usage{
 write_colony(
   data,

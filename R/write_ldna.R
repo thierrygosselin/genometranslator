@@ -1,7 +1,7 @@
 # write a LDna object from a tidy data frame
 
 #' @name write_ldna
-#' @title Write a LDna object from a tidy data frame
+#' @title Write an LDna object
 #' @section Dependencies:
 #' Required package dependencies are declared in DESCRIPTION and installed
 #' with genometranslator. Run `genometranslator_dependencies()` to inspect

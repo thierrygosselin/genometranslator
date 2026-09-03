@@ -1,7 +1,7 @@
 # write a structure file from a tidy data frame
 
 #' @name write_structure
-#' @title Write a structure file from a tidy data frame
+#' @title Write a STRUCTURE file
 #' @description Write a structure file from a tidy data frame
 #' Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
 #' and \href{https://github.com/thierrygosselin/assigner}{assigner}

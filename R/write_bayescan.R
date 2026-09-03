@@ -2,8 +2,7 @@
 # write a bayescan file from a tidy data frame
 
 #' @name write_bayescan
-#' @title Write a \href{http://cmpg.unibe.ch/software/BayeScan/}{BayeScan}
-#' file from a tidy data frame
+#' @title Write a BayeScan file
 
 #' @description Write a \href{http://cmpg.unibe.ch/software/BayeScan/}{BayeScan}
 #' file from a tidy data frame. The data is bi- or multi-allelic.

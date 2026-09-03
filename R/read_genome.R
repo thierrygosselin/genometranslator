@@ -113,9 +113,13 @@ read_genome <- function(
   if (identical(data.type, "gtypes")) {
     return(read_gtypes(data = data, verbose = verbose))
   }
-  if (data.type %in% c("plink.tped.file", "plink.bed.file")) {
+  if (data.type %in% c(
+    "plink.pgen.file", "plink.bed.file",
+    "plink.ped.file", "plink.tped.file"
+  )) {
     return(read_plink(
       data = data,
+      strata = strata,
       parallel.core = parallel.core,
       verbose = verbose
     ))
@@ -313,8 +317,10 @@ as_tidy_genome <- function(data, import.metadata = FALSE) {
 #' or GDS connection file
 #' @param output Optional output format. Supported values include \code{gds},
 #' \code{genepop}, \code{fstat}, \code{genind}, \code{genlight}, \code{gtypes},
-#' \code{plink}, \code{vcf}, and the other formats having a corresponding
-#' package \code{write_*()} function. Default: \code{output = NULL}.
+#' \code{plink}, \code{pgen}, \code{bed}, \code{ped}, \code{tped}, \code{vcf},
+#' and the other formats having a corresponding package \code{write_*()}
+#' function. \code{plink} defaults to PLINK 2 PGEN output. Default:
+#' \code{output = NULL}.
 #' @param strata Optional strata data passed to writers that support it.
 #' Default: \code{strata = NULL}.
 #' @param parallel.core Number of processor cores passed to writers that support
@@ -379,7 +385,10 @@ write_genome <- function(
       grepl("\\.gds$", lower.filename) &&
         !inherits(data, "SeqVarGDSClass") ~ "gds",
       grepl("\\.gen$", lower.filename) ~ "genepop",
-      grepl("\\.bed$|\\.ped$|\\.tped$", lower.filename) ~ "plink",
+      grepl("\\.pgen$", lower.filename) ~ "pgen",
+      grepl("\\.bed$", lower.filename) ~ "bed",
+      grepl("\\.ped$", lower.filename) ~ "ped",
+      grepl("\\.tped$", lower.filename) ~ "tped",
       grepl("\\.parquet$", lower.filename) ~ "parquet",
       TRUE ~ NA_character_
     )
@@ -389,6 +398,31 @@ write_genome <- function(
   # Generic writer routing ----------------------------------------------------
   if (!is.null(output) && !identical(tolower(output), "parquet")) {
     output <- tolower(output)
+
+    # All PLINK flavours share one writer. The explicit flavour prevents a
+    # filename such as `study.bed` from accidentally producing PGEN output.
+    if (output %in% c("plink", "pgen", "bed", "ped", "tped")) {
+      plink.format <- output
+      if (identical(plink.format, "plink")) {
+        plink.format <- if (is.null(filename)) {
+          "pgen"
+        } else {
+          extension <- tolower(tools::file_ext(filename))
+          if (extension %in% c("pgen", "bed", "ped", "tped")) {
+            extension
+          } else {
+            "pgen"
+          }
+        }
+      }
+      return(write_plink(
+        data = data,
+        filename = filename,
+        format = plink.format,
+        verbose = verbose
+      ))
+    }
+
     aliases <- c(
       fstat = "hierfstat",
       seqarray = "gds"

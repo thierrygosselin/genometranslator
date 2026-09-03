@@ -2,7 +2,7 @@
 % Please edit documentation in R/write_genepopedit.R
 \name{write_genepopedit}
 \alias{write_genepopedit}
-\title{Write a genepopedit flatten object}
+\title{Write a genepopedit object}
 \usage{
 write_genepopedit(data)
 }

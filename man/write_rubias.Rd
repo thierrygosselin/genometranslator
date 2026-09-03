@@ -2,7 +2,7 @@
 % Please edit documentation in R/write_rubias.R
 \name{write_rubias}
 \alias{write_rubias}
-\title{Write data in rubias format}
+\title{Write a rubias file}
 \usage{
 write_rubias(
   data,

@@ -2,7 +2,7 @@
 % Please edit documentation in R/gds.R
 \name{write_gds}
 \alias{write_gds}
-\title{Write a GDS object from a tidy data frame}
+\title{Write a GDS file}
 \usage{
 write_gds(
   data,

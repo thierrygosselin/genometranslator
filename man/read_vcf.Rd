@@ -2,7 +2,7 @@
 % Please edit documentation in R/vcf.R
 \name{read_vcf}
 \alias{read_vcf}
-\title{Read VCF files and write a radiator GDS file}
+\title{Read a VCF file}
 \usage{
 read_vcf(
   data,
@@ -188,7 +188,7 @@ VCFtools. \emph{Bioinformatics} 27:2156-2158.
 }
 \seealso{
 \code{\link{tidy_genome}},
-\code{\link{tidy_vcf}}
+\code{\link{read_genome}}
 }
 \author{
 Thierry Gosselin \email{thierrygosselin@icloud.com}

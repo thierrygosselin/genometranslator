@@ -2,7 +2,7 @@
 % Please edit documentation in R/write_snprelate.R
 \name{write_snprelate}
 \alias{write_snprelate}
-\title{Write a SNPRelate object from a tidy data frame}
+\title{Write a SNPRelate file}
 \usage{
 write_snprelate(data, biallelic = TRUE, filename = NULL, verbose = TRUE)
 }

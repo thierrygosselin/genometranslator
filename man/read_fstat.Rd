@@ -2,13 +2,13 @@
 % Please edit documentation in R/fstat.R
 \name{read_fstat}
 \alias{read_fstat}
-\title{Read an FSTAT file into a tidy or wide data frame}
+\title{Read an FSTAT file}
 \usage{
 read_fstat(data, strata = NULL, tidy = TRUE, filename = NULL, verbose = FALSE)
 }
 \arguments{
-\item{data}{A \href{http://www2.unil.ch/popgen/softwares/fstat.htm}{fstat}
-filename with extension \code{.dat}.}
+\item{data}{Path to an FSTAT file, commonly with extension \code{.dat}, or a
+one-column data frame containing its lines.}
 
 \item{strata}{(optional) A tab delimited file with 2 columns. Header:
 \code{INDIVIDUALS} and \code{STRATA}.
@@ -32,22 +32,26 @@ Default: \code{filename = NULL}.}
 Default: \code{verbose = FALSE}.}
 }
 \value{
-The output in your global environment is a wide or long/tidy data frame.
-If \code{filename} is provided, the wide or long/tidy data frame is also
-written to the working directory.
+A tibble in long form with \code{STRATA}, \code{INDIVIDUALS},
+\code{MARKERS}, and six-digit \code{GENOTYPE}, or wide form when
+\code{tidy = FALSE}. If \code{filename} is supplied, the same table is also
+written as a tab-separated file.
 }
 \description{
-Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
-and might be of interest for users.
-The function \code{read_fstat} reads a file in the
-\href{http://www2.unil.ch/popgen/softwares/fstat.htm}{fstat} file (Goudet, 1995)
-into a wide or long/tidy data frame
-
-To manipulate and prune the dataset prior to tidying, use the functions
-\code{\link{tidy_genome}} and
-\code{\link{genome_translator}}, that uses blacklist and whitelist along
-several other filtering options.
+Import and validate diploid data in the FSTAT text format
+(Goudet, 1995). The header, locus count, unique locus names, and genotype-row
+widths are checked before genotypes are standardized and returned in long or
+wide form.
 }
+\section{Field handling}{
+
+Population codes become \code{STRATA}; deterministic identifiers of the form
+\code{IND-1}, \code{IND-2}, ... become \code{INDIVIDUALS}; locus names become
+\code{MARKERS}; and each allele is padded to three digits. Supplied strata
+metadata replaces the embedded population code and must contain every
+generated individual identifier.
+}
+
 \section{Dependencies}{
 
 Required package dependencies are declared in \code{DESCRIPTION} and are
@@ -60,7 +64,7 @@ packages, optional packages, and external executables.
 \examples{
 \dontrun{
 # We will use the fstat dataset provided with adegenet package
-require("hierfstat")
+if (requireNamespace("hierfstat", quietly = TRUE)) {
 
 # The simplest form of the function:
 fstat.file <- genometranslator::read_fstat(
@@ -80,10 +84,11 @@ tidy = FALSE
 )
 }
 }
+}
 \references{
 Goudet J. (1995).
 FSTAT (Version 1.2): A computer program to calculate F-statistics.
-Journal of Heredity 86:485-486
+Journal of Heredity, 86, 485-486.
 }
 \seealso{
 \href{https://github.com/jgx65/hierfstat}{hierfstat}

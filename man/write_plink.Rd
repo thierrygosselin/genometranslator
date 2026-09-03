@@ -2,9 +2,18 @@
 % Please edit documentation in R/plink.R
 \name{write_plink}
 \alias{write_plink}
-\title{Write a plink tped/tfam file from a tidy data frame}
+\title{Write PLINK}
 \usage{
-write_plink(data, filename = NULL)
+write_plink(
+  data,
+  filename = NULL,
+  format = c("pgen", "bed", "ped", "tped"),
+  path.folder = getwd(),
+  plink.path = NULL,
+  plink.args = character(),
+  overwrite = FALSE,
+  verbose = TRUE
+)
 }
 \arguments{
 \item{data}{A tidy data frame object in the global environment or
@@ -12,16 +21,43 @@ a tidy data frame in wide or long format in the working directory.
 \emph{How to get a tidy data frame ?}
 Look into \pkg{genometranslator} \code{\link{tidy_genome}}.}
 
-\item{filename}{(optional) The file name prefix for tped/tfam files
-written to the working directory. With default: \code{filename = NULL},
-the date and time is appended to \code{radiator_plink_}.
-Default: \code{filename = NULL}.}
+\item{filename}{Output prefix without a PLINK extension. With
+\code{NULL}, a timestamped prefix is created in \code{path.folder}.}
+
+\item{format}{Output flavour: \code{"pgen"} (PGEN/PVAR/PSAM),
+\code{"bed"} (BED/BIM/FAM), \code{"ped"} (PED/MAP), or \code{"tped"}
+(TPED/TFAM). Default: \code{"pgen"}.}
+
+\item{path.folder}{Output directory. Default: current working directory.}
+
+\item{plink.path}{Optional path to PLINK 2. With \code{NULL}, executable
+names \code{plink2} and then \code{plink} are searched on PATH.}
+
+\item{plink.args}{Additional PLINK 2 command-line arguments. These are
+appended before \code{--out}; use only documented PLINK 2 flags.}
+
+\item{overwrite}{Logical. Permit replacement of an existing fileset.
+Default: \code{FALSE}.}
+
+\item{verbose}{Logical. Print PLINK 2 progress. Default: \code{TRUE}.}
+}
+\value{
+Invisibly, the paths of every file in the generated PLINK fileset.
 }
 \description{
-Write a plink file from a tidy data frame.
+Export genomic data to PLINK 2 PGEN/PVAR/PSAM or PLINK 1
+BED/BIM/FAM, PED/MAP, or TPED/TFAM. The active data are first represented as
+VCF and the official PLINK 2 engine creates the requested fileset.
 Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
 and \href{https://github.com/thierrygosselin/assigner}{assigner}
 and might be of interest for users.
+}
+\details{
+PGEN is the recommended general PLINK output. BED is useful for
+ADMIXTURE and other software that expects PLINK 1 binary input. PED and TPED
+are uncompressed legacy exchange formats. BED, PED, and TPED workflows should
+normally use filtered biallelic markers; this function does not silently
+remove unsuitable variants.
 }
 \section{Data filtering}{
 
@@ -43,6 +79,19 @@ for this format or option is identified in this help page. Use
 packages, optional packages, and external executables.
 }
 
+\examples{
+\dontrun{
+# Modern PLINK 2 files
+genometranslator::write_plink(genome, "study", format = "pgen")
+
+# PLINK 1 binary files for ADMIXTURE and legacy pipelines
+genometranslator::write_plink(genome, "study_admixture", format = "bed")
+
+# Text-based legacy exports
+genometranslator::write_plink(genome, "study", format = "ped")
+genometranslator::write_plink(genome, "study", format = "tped")
+}
+}
 \references{
 Purcell S, Neale B, Todd-Brown K, Thomas L, Ferreira MAR,
 Bender D, et al.

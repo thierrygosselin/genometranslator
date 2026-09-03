@@ -57,7 +57,9 @@ Suggests:
     knitr,
     rmarkdown,
     SNPRelate,
-    strataG
+    strataG,
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
 VignetteBuilder: knitr
 Encoding: UTF-8
 Language: en-US

@@ -5,7 +5,8 @@
 #' @description Detect the file format of genomic data set.
 #' @param data 15 options for input: VCFs (SNPs or Haplotypes,
 #' to make the vcf population ready),
-#' plink (tped and bed), stacks haplotype file, genind (library(adegenet)),
+#' PLINK 1 (bed, ped, and tped), PLINK 2 (pgen), stacks haplotype file,
+#' genind (library(adegenet)),
 #' genlight (library(adegenet)), gtypes (library(strataG)), genepop, DArT,
 #' and a data frame in long/tidy or wide format. To verify that radiator detect
 #' your file format use \code{\link{detect_genomic_format}} (see example below).
@@ -25,6 +26,8 @@
 #' \item vcf.file: for a vcf file
 #' \item plink.tped.file: for a plink tped file
 #' \item plink.bed.file: for a plink bed file
+#' \item plink.ped.file: for a plink ped file
+#' \item plink.pgen.file: for a PLINK 2 pgen file
 #' \item genepop.file: for a genepop file
 #' \item haplo.file: for a stacks haplotypes file
 #' \item fstat.file: for a fstat file
@@ -59,6 +62,52 @@ detect_genomic_format <- function(data, guess = NULL){
       return(data.type)
     } # not vector
     if (is.vector(data)) {
+      path.lower <- tolower(as.character(data[[1]]))
+
+      # Detect binary and text PLINK files before reading their first line.
+      # Reading a binary BED/PGEN as text is both unnecessary and unreliable.
+      plink.companions <- function(prefix, extensions, label) {
+        candidates <- vapply(
+          extensions,
+          function(ext) any(file.exists(paste0(prefix, ext))),
+          logical(1)
+        )
+        if (!all(candidates)) {
+          missing <- extensions[!candidates]
+          rlang::abort(paste0(
+            "Missing ", label, " companion file(s): ",
+            paste(missing, collapse = ", ")
+          ))
+        }
+      }
+
+      if (grepl("\\.pgen$", path.lower)) {
+        prefix <- sub("\\.pgen$", "", as.character(data[[1]]), ignore.case = TRUE)
+        if (!file.exists(paste0(prefix, ".psam"))) {
+          rlang::abort("Missing PLINK 2 companion file: .psam")
+        }
+        if (!file.exists(paste0(prefix, ".pvar")) &&
+            !file.exists(paste0(prefix, ".pvar.zst"))) {
+          rlang::abort("Missing PLINK 2 companion file: .pvar or .pvar.zst")
+        }
+        return("plink.pgen.file")
+      }
+      if (grepl("\\.bed$", path.lower)) {
+        prefix <- sub("\\.bed$", "", as.character(data[[1]]), ignore.case = TRUE)
+        plink.companions(prefix, c(".bim", ".fam"), "PLINK BED")
+        return("plink.bed.file")
+      }
+      if (grepl("\\.tped$", path.lower)) {
+        prefix <- sub("\\.tped$", "", as.character(data[[1]]), ignore.case = TRUE)
+        plink.companions(prefix, ".tfam", "PLINK TPED")
+        return("plink.tped.file")
+      }
+      if (grepl("\\.ped$", path.lower)) {
+        prefix <- sub("\\.ped$", "", as.character(data[[1]]), ignore.case = TRUE)
+        plink.companions(prefix, ".map", "PLINK PED")
+        return("plink.ped.file")
+      }
+
       data.type <- suppressWarnings(readLines(con = data, n = 1L))
       file.ending <- stringi::stri_sub(str = data, from = -4, to = -1)
 
@@ -74,29 +123,6 @@ detect_genomic_format <- function(data, guess = NULL){
         # message("File type: VCF")
         return(data.type)
       } #End VCF
-
-
-      # PLINK ------------------------------------------------------------------
-      if (file.ending == "tped") {
-        data.type <- "plink.tped.file"
-        # message("File type: PLINK tped")
-        if (!file.exists(stringi::stri_replace_all_fixed(str = data, pattern = ".tped", replacement = ".tfam", vectorize_all = FALSE))) {
-          rlang::abort("Missing tfam file with the same prefix as your tped")
-        }
-        return(data.type)
-      }#End plink
-
-      if (file.ending == ".bed") {
-        data.type <- "plink.bed.file"
-
-        # BED file requires bim and fam files...
-        bim.file <- file.exists(stringi::stri_replace_all_fixed(str = data, pattern = ".bed", replacement = ".bim", vectorize_all = FALSE))
-        fam.file <- file.exists(stringi::stri_replace_all_fixed(str = data, pattern = ".bed", replacement = ".fam", vectorize_all = FALSE))
-        if (FALSE %in% c(bim.file, fam.file)) {
-          rlang::abort("Missing fam or bim file(s) with the same prefix as your PLINK bed file")
-        }
-        return(data.type)
-      }#end plink
 
 
       # TIBBLE -----------------------------------------------------------------

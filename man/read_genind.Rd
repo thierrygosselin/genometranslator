@@ -2,7 +2,7 @@
 % Please edit documentation in R/genind.R
 \name{read_genind}
 \alias{read_genind}
-\title{Read a genind object to a GDS or tidy dataframe}
+\title{Read a genind object}
 \usage{
 read_genind(data, tidy = TRUE, gds = TRUE, write = FALSE, verbose = FALSE)
 }
@@ -13,22 +13,27 @@ path to a genind file that will be open with \code{readRDS}.}
 \item{tidy}{(logical) Generate a tidy dataset.
 Default: \code{tidy = TRUE}.}
 
-\item{gds}{(optional, logical) To write a radiator gds object.
+\item{gds}{Logical. Generate a genometranslator GDS representation.
 Currently, for biallelic datasets only.
 Default: \code{gds = TRUE}.}
 
-\item{write}{(optional, logical) To write in the working directory the tidy
-data. The file is written with \code{radiator_genind_DATE@TIME.rad}.
+\item{write}{Logical. Write the tidy table as an Arrow/Parquet file.
 Default: \code{write = FALSE}.}
 
 \item{verbose}{Logical indicating whether progress messages are emitted.
 Default: \code{verbose = FALSE}.}
 }
+\value{
+With \code{tidy = TRUE}, a tidy tibble. With
+\code{tidy = FALSE, gds = TRUE}, the generated GDS result. With both options
+false, the original \code{genind} object. Multiallelic input disables GDS
+generation and returns tidy data when requested.
+}
 \description{
-Read a genind object or file from
-\href{https://github.com/thibautjombart/adegenet}{adegenet} to a tidy dataframe.
-Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
-and might be of interest for users.
+Import an \pkg{adegenet} \code{genind} object, standardize its
+sample and locus information, and optionally produce tidy genomic data or a
+GDS representation. Diploid biallelic and multiallelic objects are supported;
+GDS generation is currently limited to biallelic data.
 }
 \note{
 \href{https://github.com/thibautjombart/adegenet}{genind} objects, like
@@ -52,8 +57,23 @@ core packages, optional packages, and external executables.
 
 Reading and writing \code{genind} objects requires the optional CRAN package
 \href{https://cran.r-project.org/package=adegenet}{\pkg{adegenet}}.
+
+
+Required package dependencies are declared in \code{DESCRIPTION} and are
+installed with \pkg{genometranslator}. Any additional dependency needed only
+for this format or option is identified in this help page. Use
+\code{genometranslator_dependencies()} to inspect the availability of core
+packages, optional packages, and external executables.
 }
 
+\examples{
+\dontrun{
+if (requireNamespace("adegenet", quietly = TRUE)) {
+  data("nancycats", package = "adegenet")
+  cats <- genometranslator::read_genind(nancycats, gds = FALSE)
+}
+}
+}
 \references{
 Jombart T (2008) adegenet: a R package for the multivariate
 analysis of genetic markers. Bioinformatics, 24, 1403-1405.

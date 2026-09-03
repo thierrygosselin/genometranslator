@@ -226,7 +226,7 @@ dots_keepers_core <- function() {
     "blacklist.genotypes", "blacklist.id", "whitelist.markers",
     "gt", "alt.dosage", "gt.vcf", "gt.vcf.nuc", "calibrate.alleles",
     "keep.allele.names", "keep.gds", "markers.info", "vcf.metadata",
-    "vcf.stats", "wide", "write.tidy", "tidy.check", "tidy.vcf",
+    "vcf.stats", "wide", "write.tidy", "tidy.check",
     "tidy.dart", "pop.levels", "pop.labels", "pop.select"
   ))
 }

@@ -15,6 +15,6 @@ A tibble with component, source, requirement level, and availability.
 }
 \description{
 Reports required and optional R packages and checks whether the optional
-\command{bcftools} executable is available. This function is intentionally
+\command{bcftools} and \command{plink2} executables are available. This function is intentionally
 diagnostic: it does not modify the R library or a Conda environment.
 }

@@ -1,7 +1,7 @@
 # write a faststructure file from a tidy data frame
 
 #' @name write_faststructure
-#' @title Write a faststructure file from a tidy data frame
+#' @title Write a fastSTRUCTURE file
 #' @section Dependencies:
 #' Required package dependencies are declared in DESCRIPTION and installed
 #' with genometranslator. Run `genometranslator_dependencies()` to inspect

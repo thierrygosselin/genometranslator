@@ -2,7 +2,7 @@
 % Please edit documentation in R/genlight.R
 \name{write_genlight}
 \alias{write_genlight}
-\title{Write a \code{genlight} object from: a tidy data frame, GDS file or object.}
+\title{Write a genlight object}
 \usage{
 write_genlight(
   data,

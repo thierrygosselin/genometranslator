@@ -1,6 +1,6 @@
 # write_dadi-----------------------------------------------------------------------
 #' @name write_dadi
-#' @title Write a \code{dadi} SNP input file from a tidy data frame.
+#' @title Write a dadi file
 #' @description This function will generate a \code{dadi} SNP input file using a
 #' radiator tidy tibble.
 #'

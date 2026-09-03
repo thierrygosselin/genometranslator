@@ -21,8 +21,10 @@ or GDS connection file}
 
 \item{output}{Optional output format. Supported values include \code{gds},
 \code{genepop}, \code{fstat}, \code{genind}, \code{genlight}, \code{gtypes},
-\code{plink}, \code{vcf}, and the other formats having a corresponding
-package \code{write_*()} function. Default: \code{output = NULL}.}
+\code{plink}, \code{pgen}, \code{bed}, \code{ped}, \code{tped}, \code{vcf},
+and the other formats having a corresponding package \code{write_*()}
+function. \code{plink} defaults to PLINK 2 PGEN output. Default:
+\code{output = NULL}.}
 
 \item{filename}{Name of the Arrow/Parquet file written for tabular data.
 The argument is not used when closing a GDS connection.}

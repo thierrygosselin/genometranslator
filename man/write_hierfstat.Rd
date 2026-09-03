@@ -2,7 +2,7 @@
 % Please edit documentation in R/fstat.R
 \name{write_hierfstat}
 \alias{write_hierfstat}
-\title{Write a hierfstat file from a tidy data frame}
+\title{Write a hierfstat file}
 \usage{
 write_hierfstat(data, filename = NULL)
 }

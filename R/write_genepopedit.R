@@ -1,7 +1,7 @@
 # write_genepopedit-----------------------------------------------------------------
 #' @name write_genepopedit
 
-#' @title Write a genepopedit flatten object
+#' @title Write a genepopedit object
 
 #' @description Write a genepopedit object from a tidy data frame or GDS file/object.
 #'

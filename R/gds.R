@@ -4696,7 +4696,7 @@ missing_per_pop <- function(
 # write a GDS object from a tidy data frame
 
 #' @name write_gds
-#' @title Write a GDS object from a tidy data frame
+#' @title Write a GDS file
 #' @description Write a Genomic Data Structure (GDS) file format
 #' \href{https://github.com/zhengxwen/gdsfmt}{gdsfmt}
 #' and object of class \code{SeqVarGDSClass} from a tidy data frame.

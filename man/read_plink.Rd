@@ -2,23 +2,26 @@
 % Please edit documentation in R/plink.R
 \name{read_plink}
 \alias{read_plink}
-\title{Reads PLINK tped and bed files}
+\title{Read PLINK}
 \usage{
 read_plink(
   data,
   filename = NULL,
+  strata = NULL,
+  plink.path = NULL,
   parallel.core = parallel::detectCores() - 1,
   verbose = TRUE,
   ...
 )
 }
 \arguments{
-\item{data}{The PLINK file.
+\item{data}{Path to the primary PLINK genotype file: \code{.pgen},
+\code{.bed}, \code{.ped}, or \code{.tped}. Companion files with the same
+prefix must be present.
 \itemize{
-\item {bi-allelic data only}. For haplotypes use VCF.
-\item \code{tped} file format: the corresponding \code{tfam} file must be in the directory.
-\item \code{bed} file format: IS THE PREFERRED format, the corresponding
-\code{fam} and \code{bim} files must be in the directory.
+\item PLINK 2: \code{pgen/pvar/psam} (\code{pvar.zst} is accepted).
+\item PLINK 1 binary: \code{bed/bim/fam}.
+\item PLINK 1 text: \code{ped/map} or \code{tped/tfam}.
 }}
 
 \item{filename}{(optional) The file name of the Genomic Data Structure (GDS) file.
@@ -26,6 +29,12 @@ genometranslator will append \code{.gds} to the filename.
 If the filename chosen exists in the working directory,
 the default \code{radiator_datetime.gds} is chosen.
 Default: \code{filename = NULL}.}
+
+\item{strata}{Optional sample metadata passed to the VCF/GDS importer for
+formats normalized with PLINK 2.}
+
+\item{plink.path}{Optional path to the PLINK 2 executable. With
+\code{NULL}, \code{plink2} and then \code{plink} are searched on PATH.}
 
 \item{parallel.core}{Default: \code{parallel.core = parallel::detectCores() - 1}.}
 
@@ -36,13 +45,11 @@ Default: \code{verbose = TRUE}.}
 or writers.}
 }
 \value{
-For \code{tped} the function returns a list object with the non-modified \code{tped} and
-the strata corresponding to the \code{tfam}.
-With \code{bed}, the function returns a GDS object.
+A writable \code{SeqVarGDSClass} connection for every supported flavour.
 }
 \description{
-The function reads PLINK tped and bed files.
-radiator prefers the use of BED file. These files are converted to
+Read PLINK 1 BED/BIM/FAM, PED/MAP, or TPED/TFAM files and
+PLINK 2 PGEN/PVAR/PSAM files. Inputs are converted to
 a connection SeqArray \href{https://github.com/zhengxwen/SeqArray}{SeqArray}
 GDS object/file of class \code{SeqVarGDSClass} (Zheng et al. 2017).
 The Genomic Data Structure (GDS) file format is detailed in
@@ -52,12 +59,9 @@ Used internally in \href{https://github.com/thierrygosselin/genometranslator}{ge
 and might be of interest for users.
 }
 \details{
-Large PLINK files will require the use of BED plink format. Look below
-in the example for conversion with PLINK.
-
-Large PLINK bed files will take longer to import and transform in GDS, but
-after the file is generated, you can close your computer and
-come back to it a month later and it's now a matter of sec to open a connection!
+BED is imported directly with SeqArray. PGEN, PED, and TPED are
+converted to a temporary VCF with PLINK 2 and then imported to GDS. The
+temporary conversion files are removed after a successful import.
 }
 \section{Dependencies}{
 
@@ -66,15 +70,15 @@ with genometranslator. Run \code{genometranslator_dependencies()} to inspect
 core packages, optional packages, and external executables.
 
 Binary BED input uses the declared Bioconductor dependencies \pkg{SeqArray}
-and \pkg{gdsfmt}. The external PLINK executable is not required to read or
-write the supported PLINK formats.
+and \pkg{gdsfmt}. PLINK 2 is required to normalize PGEN/PVAR/PSAM,
+PED/MAP, and TPED/TFAM input.
 }
 
 \examples{
 \dontrun{
-data <- genometranslator::read_plink(data = "my_plink_file.bed")
-# when conversion is required from TPED to BED, in Terminal:
-# plink --tfile my_plink_file --make-bed --allow-no-sex --allow-extra-chr --chr-set 95
+modern <- genometranslator::read_plink("study.pgen")
+admixture <- genometranslator::read_plink("study.bed")
+legacy <- genometranslator::read_plink("study.tped")
 }
 }
 \references{
@@ -88,7 +92,7 @@ analyses.
 American Journal of Human Genetics. 2007: 81: 559–575. doi:10.1086/519795
 }
 \seealso{
-\href{https://www.cog-genomics.org/plink/1.9/}{PLINK}
+\href{https://www.cog-genomics.org/plink/2.0/formats}{PLINK 2 formats}
 }
 \author{
 Thierry Gosselin \email{thierrygosselin@icloud.com}

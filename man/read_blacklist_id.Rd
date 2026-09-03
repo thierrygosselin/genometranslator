@@ -2,7 +2,7 @@
 % Please edit documentation in R/strata.R
 \name{read_blacklist_id}
 \alias{read_blacklist_id}
-\title{read_blacklist_id}
+\title{Read an individual blacklist}
 \usage{
 read_blacklist_id(blacklist.id = NULL, verbose = TRUE)
 }

@@ -2,7 +2,7 @@
 % Please edit documentation in R/gtypes.R
 \name{write_gtypes}
 \alias{write_gtypes}
-\title{Write a strataG gtypes object from GDS or tidy data}
+\title{Write a gtypes object}
 \usage{
 write_gtypes(data, write = FALSE, filename = NULL)
 }

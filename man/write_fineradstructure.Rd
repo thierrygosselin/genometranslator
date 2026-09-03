@@ -2,7 +2,7 @@
 % Please edit documentation in R/write_fineradstructure.R
 \name{write_fineradstructure}
 \alias{write_fineradstructure}
-\title{Write a fineRADstructure file from a tidy data frame}
+\title{Write a fineRADstructure file}
 \usage{
 write_fineradstructure(data, strata = NULL, filename = NULL)
 }

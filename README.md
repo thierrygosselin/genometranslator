@@ -7,13 +7,49 @@
 state and is being actively
 developed.](http://www.repostatus.org/badges/latest/active.svg)](http://www.repostatus.org/#active)
 [![packageversion](https://img.shields.io/badge/Package%20version-0.0.0.9000-orange.svg)](commits/master)
-[![Last-changedate](https://img.shields.io/badge/last%20change-2026--08--23-brightgreen.svg)](/commits/master)
+[![Last-changedate](https://img.shields.io/badge/last%20change-2026--09--03-brightgreen.svg)](/commits/master)
 <!-- badges: end -->
 
 `genometranslator` reads, standardizes, and writes individual genomic
-data. The easiest interface is `read_genome` and `write_genome`; use a
-format-specific `read_*` or `write_*` function when more control is
-needed.
+data. The easiest interface is `read_genome()` and `write_genome()`; use
+a format-specific `read_*()` or `write_*()` function when more control
+is needed. Large genomic datasets remain in a file-backed GDS rather
+than being expanded into an R data frame unless that conversion is
+requested explicitly.
+
+## Quick start
+
+`read_genome()` detects VCF, DArT, PLINK, FSTAT, Genepop, GDS, and
+supported R genomic objects and dispatches to the corresponding reader:
+
+``` r
+genome <- genometranslator::read_genome(
+  data = "individuals.vcf.gz",
+  strata = "strata.tsv"
+)
+```
+
+For VCF-specific controls, call `read_vcf()` directly. Both interfaces
+return an open SeqArray GDS object:
+
+``` r
+genome <- genometranslator::read_vcf(
+  data = "individuals.vcf.gz",
+  strata = "strata.tsv",
+  filename = "individuals"
+)
+```
+
+Use `tidy_genome()` only when an in-memory table is genuinely needed:
+
+``` r
+genotypes <- genometranslator::tidy_genome(data = genome)
+```
+
+The former `tidy_vcf()` wrapper has been removed. Its import
+responsibilities belong to `read_genome()` and `read_vcf()`, while
+filtering belongs in `radr`. The historical implementation remains
+available in `radiator` for legacy workflows.
 
 ## Installation
 
@@ -45,6 +81,12 @@ install.packages("adegenet")
 
 See the documentation for the relevant `read_*` or `write_*` function
 for the exact dependency and data requirements of that format.
+
+VCF imports retain caller and workflow provenance in GDS metadata and
+preserve common structural-variant annotations when they are present.
+See the [get-started vignette](articles/using_genometranslator.html) for
+the current scope and the roadmap toward a dedicated structural-variant
+representation.
 
 Run the dependency diagnostic after installation:
 
@@ -124,7 +166,7 @@ or DOI is available:
 > Gosselin, T. (2026). *genometranslator: Read, standardize and
 > translate genomic data*. R package version 0.0.0.9000.
 > <https://github.com/thierrygosselin/genometranslator>. Accessed
-> 2026-08-23.
+> 2026-09-03.
 
 ## Website and support
 

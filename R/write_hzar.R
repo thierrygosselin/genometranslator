@@ -1,7 +1,7 @@
 # write a HZAR file from a tidy data frame
 
 #' @name write_hzar
-#' @title Write a HZAR file from a tidy data frame.
+#' @title Write an HZAR file
 
 #' @description Write a HZAR file (Derryberry et al. 2013), from a tidy data frame.
 #' Used internally in
@@ -193,4 +193,3 @@ generate_hzar <- carrier::crate(function(x) {
   sample.n.info <- NULL
   return(freq.info)
 })#End generate_hzar
-

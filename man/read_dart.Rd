@@ -2,7 +2,7 @@
 % Please edit documentation in R/dart.R
 \name{read_dart}
 \alias{read_dart}
-\title{Read and tidy \href{http://www.diversityarrays.com}{DArT} output files.}
+\title{Read DArT}
 \usage{
 read_dart(
   data,
@@ -58,8 +58,9 @@ you can then use it inside \code{MS EXCEL} and build the remaining columns.
 your sampling sites or populations. Keep it simple, 3 or 4 letters, like
 TAS for Tasmania, etc.
 
-Silico DArT data is currently used to detect sex markers, so the \code{STRATA}
-column should be filed with sex information: \code{M} or \code{F}.
+SilicoDArT data can be used to detect sex markers. Sex should be stored in a
+dedicated metadata column (for example, \code{SEX}); \code{STRATA} can remain
+the population or sampling group.
 }}
 
 \item{filename}{(optional) The function uses \code{\link[arrow]{read_parquet}},
@@ -85,9 +86,11 @@ Default: \code{verbose = TRUE}.}
 \item{...}{(optional) To pass further argument for fine-tuning the function.}
 }
 \value{
-A radr GDS file and tidy dataframe with several columns depending on DArT file:
-\code{silico.dart:} A tibble with 5 columns: \code{CLONE_ID, SEQUENCE, VALUE, INDIVIDUALS, STRATA}.
-This object is also saved in the directory (file ending with .rad).
+A SeqArray GDS file or, with \code{tidy.dart = TRUE}, a tidy data
+frame. SilicoDArT observations are stored in GDS as synthetic homozygous
+absence/presence states and identified by \code{MARKER_TYPE = SILICODART};
+they must not be interpreted as diploid SNP genotypes. When SilicoDArT values
+are counts, the original values are also retained as read depth.
 
 Common to \code{1row, 2rows and counts}: A GDS file is automatically generated.
 To have a tidy tibble, the argument \code{tidy.dart = TRUE} must be used.

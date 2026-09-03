@@ -1,20 +1,14 @@
 # read_fstat -------------------------------------------------------------------
 #' @name read_fstat
-#' @title Read an FSTAT file into a tidy or wide data frame
+#' @title Read an FSTAT file
 
-#' @description Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
-#' and might be of interest for users.
-#' The function \code{read_fstat} reads a file in the
-#' \href{http://www2.unil.ch/popgen/softwares/fstat.htm}{fstat} file (Goudet, 1995)
-#' into a wide or long/tidy data frame
-#'
-#' To manipulate and prune the dataset prior to tidying, use the functions
-#' \code{\link{tidy_genome}} and
-#' \code{\link{genome_translator}}, that uses blacklist and whitelist along
-#' several other filtering options.
+#' @description Import and validate diploid data in the FSTAT text format
+#' (Goudet, 1995). The header, locus count, unique locus names, and genotype-row
+#' widths are checked before genotypes are standardized and returned in long or
+#' wide form.
 
-#' @param data A \href{http://www2.unil.ch/popgen/softwares/fstat.htm}{fstat}
-#' filename with extension \code{.dat}.
+#' @param data Path to an FSTAT file, commonly with extension \code{.dat}, or a
+#' one-column data frame containing its lines.
 
 #' @param strata (optional) A tab delimited file with 2 columns. Header:
 #' \code{INDIVIDUALS} and \code{STRATA}.
@@ -34,9 +28,17 @@
 #' in the global environment only (i.e. not written in the working directory).
 
 #' Default: \code{filename = NULL}.
-#' @return The output in your global environment is a wide or long/tidy data frame.
-#' If \code{filename} is provided, the wide or long/tidy data frame is also
-#' written to the working directory.
+#' @return A tibble in long form with \code{STRATA}, \code{INDIVIDUALS},
+#' \code{MARKERS}, and six-digit \code{GENOTYPE}, or wide form when
+#' \code{tidy = FALSE}. If \code{filename} is supplied, the same table is also
+#' written as a tab-separated file.
+#'
+#' @section Field handling:
+#' Population codes become \code{STRATA}; deterministic identifiers of the form
+#' \code{IND-1}, \code{IND-2}, ... become \code{INDIVIDUALS}; locus names become
+#' \code{MARKERS}; and each allele is padded to three digits. Supplied strata
+#' metadata replaces the embedded population code and must contain every
+#' generated individual identifier.
 
 #' @param verbose Logical indicating whether progress messages are emitted.
 #' Default: \code{verbose = FALSE}.
@@ -47,7 +49,7 @@
 #' @examples
 #' \dontrun{
 #' # We will use the fstat dataset provided with adegenet package
-#' require("hierfstat")
+#' if (requireNamespace("hierfstat", quietly = TRUE)) {
 #'
 #' # The simplest form of the function:
 #' fstat.file <- genometranslator::read_fstat(
@@ -66,11 +68,12 @@
 #' tidy = FALSE
 #' )
 #' }
+#' }
 
 
 #' @references Goudet J. (1995).
 #' FSTAT (Version 1.2): A computer program to calculate F-statistics.
-#' Journal of Heredity 86:485-486
+#' Journal of Heredity, 86, 485-486.
 
 #' @seealso \href{https://github.com/jgx65/hierfstat}{hierfstat}
 
@@ -95,14 +98,21 @@ read_fstat <- function(
   on.exit(tgbase::teardown(.start), add = TRUE)
 
   # Checking for missing and/or default arguments-------------------------------
-  if (missing(data)) rlang::abort("fstat file missing")
+  if (missing(data)) rlang::abort("An FSTAT file or table is required.")
 
 
   # Import data ------------------------------------------------------------------
-  if (is.vector(data)) {
+  if (is.character(data) && length(data) == 1L) {
+    if (!file.exists(data)) rlang::abort("The FSTAT file does not exist.")
     data <- readr::read_delim(file = data, delim = "?", col_names = "data", col_types = "c")
+  } else if (inherits(data, "data.frame")) {
+    if (ncol(data) != 1L) {
+      rlang::abort("An in-memory FSTAT table must contain exactly one column.")
+    }
+    names(data) <- "data"
+    data <- tibble::as_tibble(data)
   } else {
-    data %<>% dplyr::rename(data = V1)
+    rlang::abort("`data` must be one FSTAT file path or a one-column table.")
   }
 
   # replace potential white space character: [\t\n\f\r\p{Z}] -----------------------------
@@ -118,27 +128,46 @@ read_fstat <- function(
   fstat.first.line <- data %>%
     dplyr::slice(1) %>%
     tidyr::separate(col = data, into = c("np", "nl", "nu", "allele.coding"), sep = "\t")
+  header <- suppressWarnings(as.integer(unlist(fstat.first.line[1, ], use.names = FALSE)))
+  if (length(header) != 4L || anyNA(header) || any(header <= 0L)) {
+    rlang::abort("The FSTAT header must contain four positive integers: np, nl, nu, and allele coding width.")
+  }
+  names(header) <- c("np", "nl", "nu", "allele.coding")
 
   # create a data frame --------------------------------------------------------
 
   # markers
   markers <- data %>%
-    dplyr::slice(2:(as.numeric(fstat.first.line$nl) + 1)) %>%
+    dplyr::slice(2:(header[["nl"]] + 1L)) %>%
     purrr::flatten_chr(.x = .)
+  markers <- trimws(markers)
+  if (length(markers) != header[["nl"]] || any(!nzchar(markers))) {
+    rlang::abort("The number of FSTAT locus names does not match `nl` in the header.")
+  }
+  if (anyDuplicated(markers)) rlang::abort("FSTAT locus names must be unique.")
 
   # Isolate the genotypes and pop column
   data %<>%
-    dplyr::slice(-(1:(as.numeric(fstat.first.line$nl) + 1)))
+    dplyr::slice(-(1:(header[["nl"]] + 1L)))
 
   # separate the dataset by tab
+  genotype.rows <- stringi::stri_split_fixed(str = data$data, pattern = "\t")
+  expected.fields <- header[["nl"]] + 1L
+  if (any(lengths(genotype.rows) != expected.fields)) {
+    bad.rows <- which(lengths(genotype.rows) != expected.fields)
+    rlang::abort(paste0(
+      "FSTAT genotype rows do not contain one population field and `nl` genotypes: ",
+      paste(utils::head(bad.rows, 10L), collapse = ", "), "."
+    ))
+  }
   data <- tibble::as_tibble(
-    do.call(rbind, stringi::stri_split_fixed(str = data$data, pattern = "\t")),
+    do.call(rbind, genotype.rows),
     .name_repair = "minimal"
   ) %>%
     magrittr::set_colnames(x = ., c("STRATA", markers))
 
   # Create a string of id
-  id <- tibble::tibble(INDIVIDUALS = paste0("IND-", seq_along(1:length(data$STRATA))))
+  id <- tibble::tibble(INDIVIDUALS = paste0("IND-", seq_len(nrow(data))))
 
   # bind with data
   data <- dplyr::bind_cols(id, data)
@@ -148,7 +177,11 @@ read_fstat <- function(
 
   if (!is.null(strata)) {
     strata <- genometranslator::read_strata(strata = strata) %$% strata
-    data <- join_strata(data = data, strata = strata)
+    data <- dplyr::select(data, -STRATA) %>%
+      dplyr::left_join(strata, by = "INDIVIDUALS")
+    if (anyNA(data$STRATA)) {
+      rlang::abort("Some FSTAT individuals are absent from the supplied strata metadata.")
+    }
   }
 
   # Tidy -------------------------------------------------------------------------
@@ -163,7 +196,7 @@ read_fstat <- function(
       variable_factor = FALSE
     ) %>%
     tidyr::separate(
-      col = GENOTYPE, into = c("A1", "A2"), sep = as.numeric(fstat.first.line$allele.coding)
+      col = GENOTYPE, into = c("A1", "A2"), sep = header[["allele.coding"]]
     ) %>%
     dplyr::mutate(
       A1 = stringi::stri_pad_left(str = A1, pad = "0", width = 3),
@@ -194,7 +227,7 @@ read_fstat <- function(
 # write_hierfstat --------------------------------------------------------------
 
 #' @name write_hierfstat
-#' @title Write a hierfstat file from a tidy data frame
+#' @title Write a hierfstat file
 
 #' @description Write a hierfstat file from a tidy data frame.
 #' Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}

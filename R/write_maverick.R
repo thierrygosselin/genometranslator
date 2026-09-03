@@ -1,7 +1,7 @@
 # write a maverick file from a tidy data frame
 
 #' @name write_maverick
-#' @title Write a maverick file from a tidy data frame
+#' @title Write a MavericK file
 #' @description Write a maverick file from a tidy data frame
 #' Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
 #' and might be of interest for users.

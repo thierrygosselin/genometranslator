@@ -2,7 +2,7 @@
 % Please edit documentation in R/write_gsi_sim.R
 \name{write_gsi_sim}
 \alias{write_gsi_sim}
-\title{Write a gsi_sim file from a data frame (wide or long/tidy).}
+\title{Write a gsi_sim file}
 \usage{
 write_gsi_sim(
   data,

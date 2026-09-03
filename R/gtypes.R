@@ -1,7 +1,7 @@
 # read_gtypes ------------------------------------------------------------------
 
 #' @name read_gtypes
-#' @title Read a gtypes object into a tidy data frame
+#' @title Read a gtypes object
 #' @section Dependencies:
 #' Required package dependencies are declared in DESCRIPTION and installed
 #' with genometranslator. Run `genometranslator_dependencies()` to inspect
@@ -10,10 +10,9 @@
 #' \code{gtypes} support requires the optional GitHub package
 #' \href{https://github.com/EricArcher/strataG}{\pkg{strataG}}. Consult its
 #' repository for current installation and troubleshooting information.
-#' @description Transform a [strataG gtypes](https://github.com/EricArcher/strataG)
-#' object into a tidy data frame.
-#' Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
-#' and might be of interest for users.
+#' @description Import a diploid \pkg{strataG} \code{gtypes} object and
+#' standardize its sample, stratum, locus, and allele fields as a tidy genotype
+#' table. Required data-slot columns and diploid allele counts are validated.
 
 #' @param data A gtypes object (>= v.2.0.2) in the global environment.
 
@@ -22,6 +21,16 @@
 #' 
 #' @export
 #' @rdname read_gtypes
+#' @return A tibble with \code{STRATA}, \code{INDIVIDUALS}, \code{MARKERS}, and
+#' six-digit \code{GT}. Nucleotide alleles use a stable A/C/G/T mapping, numeric
+#' alleles retain their values, and other labels are encoded within each locus.
+#' @examples
+#' \dontrun{
+#' if (requireNamespace("strataG", quietly = TRUE)) {
+#'   x <- readRDS("genotypes.gtypes.rds")
+#'   genotypes <- genometranslator::read_gtypes(x)
+#' }
+#' }
 #' @references Archer FI, Adams PE, Schneiders BB.
 #' strataG: An r package for manipulating, summarizing and analysing population
 #' genetic data.
@@ -29,6 +38,7 @@
 
 
 #' @author Thierry Gosselin \email{thierrygosselin@@icloud.com}
+#' @template io-dependencies
 
 read_gtypes <- function(data, verbose = FALSE) {
 
@@ -47,13 +57,18 @@ read_gtypes <- function(data, verbose = FALSE) {
   # import ---------------------------------------------------------------------
   # lots of changes with gtypes so some stuff might be broken...
 
-  input <- tibble::as_tibble(data@data) %>%
-    dplyr::rename(
-      INDIVIDUALS = id,
-      STRATA = stratum,
-      MARKERS = tidyselect::any_of("locus"),
-      GT = tidyselect::any_of("allele")
-      )
+  input <- tibble::as_tibble(data@data)
+  required.columns <- c("id", "stratum", "locus", "allele")
+  missing.columns <- setdiff(required.columns, names(input))
+  if (length(missing.columns)) {
+    rlang::abort(paste0(
+      "The gtypes data slot is missing required column(s): ",
+      paste(missing.columns, collapse = ", "), "."
+    ))
+  }
+  names(input)[match(required.columns, names(input))] <- c(
+    "INDIVIDUALS", "STRATA", "MARKERS", "GT"
+  )
 
   # input <- suppressWarnings(
   #   tibble::as_tibble(data@data) %>%
@@ -68,20 +83,34 @@ read_gtypes <- function(data, verbose = FALSE) {
   # )
   # detect stratg genotype coding ----------------------------------------------
   # For GT = c("A", "C", "G", "T")
-  gt.format <- sort(unique(input$GT))
+  gt.format <- sort(unique(as.character(input$GT[!is.na(input$GT)])))
 
-  if (unique(gt.format %in% c("A", "C", "G", "T", NA))) {
+  # Nucleotide alleles use a stable A/C/G/T integer mapping. Numeric alleles
+  # retain their codes; other labels are encoded per locus.
+  if (length(gt.format) && all(gt.format %in% c("A", "C", "G", "T"))) {
     input$GT <- stringi::stri_replace_all_regex(
       str = input$GT,
       pattern = c("A", "C", "G", "T"),
       replacement = c("001", "002", "003", "004"),
       vectorize_all = FALSE
     )
-  }
-
-  # For GT = c("1", "2")
-  if (unique(gt.format %in% c("1", "2", NA))) {
+  } else if (length(gt.format) && all(grepl("^[0-9]+$", gt.format))) {
     input$GT <- stringi::stri_pad_left(str = input$GT, pad = "0", width = 3)
+  } else if (length(gt.format)) {
+    input <- input %>%
+      dplyr::group_by(MARKERS) %>%
+      dplyr::mutate(
+        GT = dplyr::if_else(
+          is.na(GT),
+          NA_character_,
+          stringi::stri_pad_left(
+            as.character(match(as.character(GT), unique(as.character(GT[!is.na(GT)])))),
+            width = 3,
+            pad = "0"
+          )
+        )
+      ) %>%
+      dplyr::ungroup()
   }
 
   # For GT coded with only 1 number
@@ -89,14 +118,23 @@ read_gtypes <- function(data, verbose = FALSE) {
   # unique(stringi::stri_count_boundaries(str = test))
 
   # prep tidy ------------------------------------------------------------------
+  allele.counts <- input %>%
+    dplyr::count(STRATA, INDIVIDUALS, MARKERS, name = "n_alleles")
+  if (any(allele.counts$n_alleles != 2L)) {
+    rlang::abort("read_gtypes currently requires exactly two allele rows per individual and locus.")
+  }
+
   input %<>%
     dplyr::mutate(
       GT = replace(GT, which(is.na(GT)), "000"),
       GT = stringi::stri_pad_left(str = GT, pad = "0", width = 3),
-      STRATA = as.character(STRATA)
+      INDIVIDUALS = clean_ind_names(INDIVIDUALS),
+      STRATA = clean_pop_names(STRATA, factor = FALSE),
+      MARKERS = as.character(MARKERS)
     ) %>%
     dplyr::group_by(STRATA, INDIVIDUALS, MARKERS) %>%
-    dplyr::summarise(GT = stringi::stri_join(GT, collapse = ""), .groups = "drop")
+    dplyr::summarise(GT = stringi::stri_join(GT, collapse = ""), .groups = "drop") %>%
+    dplyr::arrange(MARKERS, STRATA, INDIVIDUALS)
 
   ## before
   # input %<>%
@@ -116,7 +154,7 @@ read_gtypes <- function(data, verbose = FALSE) {
 # write_gtypes -----------------------------------------------------------------
 
 #' @name write_gtypes
-#' @title Write a strataG gtypes object from GDS or tidy data
+#' @title Write a gtypes object
 #' @section Dependencies:
 #' Required package dependencies are declared in DESCRIPTION and installed
 #' with genometranslator. Run `genometranslator_dependencies()` to inspect

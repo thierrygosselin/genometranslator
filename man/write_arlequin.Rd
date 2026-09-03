@@ -2,7 +2,7 @@
 % Please edit documentation in R/write_arlequin.R
 \name{write_arlequin}
 \alias{write_arlequin}
-\title{Write an arlequin file from a tidy data frame}
+\title{Write an Arlequin file}
 \usage{
 write_arlequin(data, pop.levels = NULL, filename = NULL, ...)
 }

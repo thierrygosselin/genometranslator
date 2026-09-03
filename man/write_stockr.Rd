@@ -2,7 +2,7 @@
 % Please edit documentation in R/write_stockr.R
 \name{write_stockr}
 \alias{write_stockr}
-\title{Write a stockR dataset from a tidy data frame or GDS file or object.}
+\title{Write a stockR dataset}
 \usage{
 write_stockr(data, filename = NULL, verbose = TRUE)
 }

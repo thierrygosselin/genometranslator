@@ -5,7 +5,7 @@
 
 #' @name read_dart
 
-#' @title Read and tidy \href{http://www.diversityarrays.com}{DArT} output files.
+#' @title Read DArT
 
 #' @description Used internally in \href{https://github.com/thierrygosselin/radr}{radr}
 #' and might be of interest for users. The function generate a GDS object/file
@@ -59,8 +59,9 @@
 #' TAS for Tasmania, etc.
 #'
 #'
-#' Silico DArT data is currently used to detect sex markers, so the \code{STRATA}
-#' column should be filed with sex information: \code{M} or \code{F}.
+#' SilicoDArT data can be used to detect sex markers. Sex should be stored in a
+#' dedicated metadata column (for example, \code{SEX}); \code{STRATA} can remain
+#' the population or sampling group.
 #' }
 #'
 #'
@@ -78,9 +79,11 @@
 
 #' @param ... (optional) To pass further argument for fine-tuning the function.
 
-#' @return A radr GDS file and tidy dataframe with several columns depending on DArT file:
-#' \code{silico.dart:} A tibble with 5 columns: \code{CLONE_ID, SEQUENCE, VALUE, INDIVIDUALS, STRATA}.
-#' This object is also saved in the directory (file ending with .rad).
+#' @return A SeqArray GDS file or, with \code{tidy.dart = TRUE}, a tidy data
+#' frame. SilicoDArT observations are stored in GDS as synthetic homozygous
+#' absence/presence states and identified by \code{MARKER_TYPE = SILICODART};
+#' they must not be interpreted as diploid SNP genotypes. When SilicoDArT values
+#' are counts, the original values are also retained as read depth.
 #'
 #' Common to \code{1row, 2rows and counts}: A GDS file is automatically generated.
 #' To have a tidy tibble, the argument \code{tidy.dart = TRUE} must be used.
@@ -316,7 +319,7 @@ read_dart <- function(
   # if (verbose) cat(paste0(stringi::stri_pad_both(str = paste0(" Target ids "), width = 80L, pad = "-"), "\n"))
   if (verbose) message(stringi::stri_pad_both(str = " Target ids ", width = 80L, pad = "-"), "\n")
   if (verbose) message("Extracting DArT TARGET_ID")
-  target.id <- extract_dart_target_id(data, write = FALSE, metadata = TRUE)
+  target.id <- extract_dart_target_id(data, write = FALSE, metadata = FALSE)
 
   # Read Strata file -----------------------------------------------------------
   # if (verbose) cat(paste0(stringi::stri_pad_both(str = paste0(" Strata "), width = 80L, pad = "-"), "\n"))
@@ -346,6 +349,10 @@ read_dart <- function(
   )
   target.id <- NULL
 
+  # Detect the DArT format before importing markers or observations. SilicoDArT
+  # requires a dominant-marker path and must not enter REF/ALT calibration.
+  dart.check <- detect_dart_format(data, verbose = FALSE)
+
   # Extract markers metadata ------------------------------------------------------
   # if (verbose) cat(paste0(stringi::stri_pad_both(str = paste0(" Markers "), width = 80L, pad = "-"), "\n"))
   if (verbose) message(stringi::stri_pad_both(str = " Markers ", width = 80L, pad = "-"), "\n")
@@ -358,15 +365,83 @@ read_dart <- function(
   variant.id <- markers.meta$variant.id
   markers.meta <- markers.meta$metadata
 
+  # SilicoDArT ---------------------------------------------------------------
+  if (identical(dart.check$dart.format, "silico.dart")) {
+    silico <- .read_silicodart_values(
+      data = data,
+      strata = strata,
+      dart.check = dart.check,
+      variant.id = variant.id,
+      markers.meta = markers.meta,
+      parallel.core = parallel.core
+    )
+    markers.meta <- dplyr::mutate(
+      markers.meta,
+      DART_VALUE_TYPE = if (silico$counts) "count" else "presence_absence"
+    )
+    readr::write_tsv(markers.meta, meta.filename)
+    if (verbose) message("File written: ", basename(meta.filename))
+
+    if (verbose) {
+      message(stringi::stri_pad_both(
+        str = " Format: GDS ", width = 80L, pad = "-"
+      ), "\n")
+    }
+    dart.gds <- genome_gds(
+      genotypes = silico$genotypes,
+      biallelic = TRUE,
+      data.source = if (silico$counts) {
+        "dart.silicodart.counts"
+      } else {
+        "dart.silicodart"
+      },
+      strata = strata,
+      markers.meta = markers.meta,
+      dp = silico$depth,
+      filename = filename.gds,
+      open = TRUE,
+      verbose = verbose
+    )
+
+    if (verbose) {
+      message(stringi::stri_pad_both(
+        str = " Summary ", width = 80L, pad = "-"
+      ), "\n")
+      message("Number of SilicoDArT markers: ", nrow(markers.meta))
+      message("Observation type: ", if (silico$counts) "counts" else "0/1")
+      summary_strata(strata)
+    }
+    if (tidy.dart) {
+      tidy <- silico$tidy %>%
+        dplyr::left_join(
+          dplyr::select(
+            markers.meta,
+            tidyselect::any_of(c(
+              "VARIANT_ID", "MARKERS", "CHROM", "LOCUS", "POS",
+              "SEQUENCE", "MARKER_TYPE", "DART_VALUE_TYPE"
+            ))
+          ),
+          by = "VARIANT_ID"
+        ) %>%
+        dplyr::left_join(
+          dplyr::select(
+            strata, tidyselect::any_of(c("ID_SEQ", "INDIVIDUALS")),
+            tidyselect::everything()
+          ),
+          by = "ID_SEQ"
+        )
+      write_genome(data = tidy, filename = filename, verbose = verbose)
+      return(tidy)
+    }
+    return(dart.gds)
+  }
+
   # will save when recalibration is checked...below
 
   # Read Genotypes -------------------------------------------------------------
   # if (verbose) cat(paste0(stringi::stri_pad_both(str = paste0(" Genotypes "), width = 80L, pad = "-"), "\n"))
   if (verbose) message(stringi::stri_pad_both(str = " Genotypes ", width = 80L, pad = "-"), "\n")
   if (verbose) message("Importing DArT genotypes information from file...")
-
-  # Check DArT format file
-  dart.check <- detect_dart_format(data, verbose = FALSE)
 
   # split dataset by strata or cores
   strata.split <- tgbase::split_vec(
@@ -445,43 +520,6 @@ read_dart <- function(
     genotypes %<>% dplyr::filter(VARIANT_ID %in% markers.meta$VARIANT_ID)
   }
 
-
-  # Silico DArT ----------------------------------------------------------------
-  if ("silico.dart" %in% dart.check$dart.format) {
-    want <- c("CLONE_ID", "SEQUENCE", strata$INDIVIDUALS)
-    data %<>%
-      dplyr::select(tidyselect::any_of(want)) %>%
-      tgbase::trans_long(
-        x = .,
-        cols = c("CLONE_ID", "SEQUENCE"),
-        names_to = "INDIVIDUALS",
-        values_to = "VALUE",
-        variable_factor = FALSE
-      )
-
-    n.clone <- length(unique(data$CLONE_ID))
-    data <- genometranslator::join_strata(data = data, strata = strata)
-
-    filename <- generate_filename(
-      name.shortcut = "radr.silico.dart",
-      path.folder = path.folder,
-      date = TRUE,
-      extension = "arrow.parquet"
-    )$filename
-
-    write_genome(
-      data = data,
-      filename = filename,
-      write.message = "standard",
-      verbose = verbose
-    )
-
-
-    if (verbose) message("################################### SUMMARY ####################################\n")
-    message("\nNumber of clones: ", n.clone)
-    summary_strata(strata)
-    return(data)
-  }
 
   # DArT genotyping ------------------------------------------------------------
   # if (verbose) cat(paste0(stringi::stri_pad_both(str = paste0(" Normalization "), width = 80L, pad = "-"), "\n"))
@@ -594,6 +632,94 @@ read_dart <- function(
     return(dart.gds)
   }
 }#End read_dart
+
+# Read dominant SilicoDArT observations ---------------------------------------
+.read_silicodart_values <- function(
+    data,
+    strata,
+    dart.check,
+    variant.id,
+    markers.meta,
+    parallel.core
+) {
+  target.id <- as.character(strata$TARGET_ID)
+  header <- suppressWarnings(vroom::vroom(
+    file = data,
+    delim = dart.check$tokenizer.dart,
+    col_names = TRUE,
+    skip = dart.check$skip.number,
+    n_max = 0L,
+    progress = FALSE,
+    show_col_types = FALSE,
+    .name_repair = "minimal"
+  ))
+  source.names <- names(header)
+  clean.names <- stringi::stri_trans_toupper(clean_ind_names(source.names))
+  source.columns <- source.names[match(target.id, clean.names)]
+  if (anyNA(source.columns)) {
+    missing <- target.id[is.na(source.columns)]
+    rlang::abort(paste0(
+      "SilicoDArT sample column(s) not found: ",
+      paste(missing, collapse = ", "), "."
+    ))
+  }
+  observations <- suppressWarnings(vroom::vroom(
+    file = data,
+    delim = dart.check$tokenizer.dart,
+    col_select = tidyselect::all_of(source.columns),
+    col_names = TRUE,
+    skip = dart.check$skip.number,
+    na = c("-", "NA", ""),
+    guess_max = 20,
+    altrep = TRUE,
+    skip_empty_rows = TRUE,
+    trim_ws = FALSE,
+    num_threads = parallel.core,
+    progress = FALSE,
+    show_col_types = FALSE,
+    .name_repair = "minimal"
+  ))
+  names(observations) <- target.id
+  if (ncol(observations) != nrow(strata)) {
+    rlang::abort("SilicoDArT columns do not match the retained strata samples.")
+  }
+  values <- matrix(
+    suppressWarnings(as.numeric(unlist(observations, use.names = FALSE))),
+    nrow = nrow(observations),
+    ncol = ncol(observations)
+  )
+  keep <- match(markers.meta$VARIANT_ID, variant.id)
+  if (anyNA(keep)) {
+    rlang::abort("SilicoDArT marker metadata could not be matched to observations.")
+  }
+  values <- t(values[keep, , drop = FALSE])
+  counts <- any(values > 1, na.rm = TRUE)
+  presence <- ifelse(is.na(values), NA_integer_, as.integer(values > 0))
+
+  genotypes <- array(
+    NA_integer_, dim = c(2L, nrow(presence), ncol(presence))
+  )
+  genotypes[1L, , ] <- presence
+  genotypes[2L, , ] <- presence
+
+  id.seq <- if ("ID_SEQ" %in% names(strata)) {
+    strata$ID_SEQ
+  } else {
+    seq_len(nrow(strata))
+  }
+  tidy <- tibble::tibble(
+    VARIANT_ID = rep(markers.meta$VARIANT_ID, each = nrow(values)),
+    ID_SEQ = rep(id.seq, times = ncol(values)),
+    SILICODART_VALUE = as.vector(values),
+    SILICODART_PRESENCE = as.vector(presence)
+  )
+  list(
+    genotypes = genotypes,
+    depth = if (counts) values else NULL,
+    tidy = tidy,
+    counts = counts
+  )
+}
 
 # extract_dart_target_id--------------------------------------------------------
 #' @name extract_dart_target_id
@@ -1221,6 +1347,48 @@ extract_dart_markers_metadata <- function(
     blacklist.id = NULL,
     strata = NULL
   )
+
+  # SilicoDArT markers describe dominant sequence presence rather than a SNP.
+  # POS = 1 is a stable within-clone sentinel, not a reference coordinate.
+  if (identical(dart.check$dart.format, "silico.dart")) {
+    if (!"CLONE_ID" %in% names(metadata)) {
+      rlang::abort("SilicoDArT metadata require a CLONE_ID column.")
+    }
+    metadata %<>%
+      dplyr::mutate(
+        FILTERS = "whitelist",
+        M_SEQ = VARIANT_ID,
+        CHROM = "DENOVO",
+        LOCUS = as.character(CLONE_ID),
+        POS = 1L,
+        COL = NA_integer_,
+        REF = "0",
+        ALT = "1",
+        MARKERS = make_marker_id(CHROM, LOCUS, POS),
+        MARKER_TYPE = "SILICODART"
+      )
+    if (!is.null(whitelist.markers)) {
+      whitelist.markers <- read_whitelist(
+        whitelist.markers = whitelist.markers, verbose = verbose
+      )
+      keys <- intersect(
+        c("VARIANT_ID", "M_SEQ", "MARKERS", "CHROM", "LOCUS", "POS"),
+        intersect(names(metadata), names(whitelist.markers))
+      )
+      if (!length(keys)) {
+        rlang::abort("SilicoDArT whitelist has no recognized marker identifier.")
+      }
+      metadata %<>% dplyr::semi_join(whitelist.markers, by = keys)
+    }
+    metadata %<>%
+      dplyr::distinct(VARIANT_ID, .keep_all = TRUE) %>%
+      dplyr::select(
+        FILTERS, M_SEQ, VARIANT_ID, MARKERS, MARKER_TYPE, CHROM, LOCUS,
+        POS, COL, REF, ALT, tidyselect::everything()
+      ) %>%
+      dplyr::arrange(VARIANT_ID)
+    return(list(metadata = metadata, variant.id = variant.id))
+  }
 
   # Checks...
 

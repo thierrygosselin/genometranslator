@@ -1,6 +1,6 @@
 # read_genlight ----------------------------------------------------------------
 #' @name read_genlight
-#' @title Read a genlight object into a tidy data frame and/or GDS object/file
+#' @title Read a genlight object
 #' @section Dependencies:
 #' Required package dependencies are declared in DESCRIPTION and installed
 #' with genometranslator. Run `genometranslator_dependencies()` to inspect
@@ -8,9 +8,9 @@
 #'
 #' Reading and writing \code{genlight} objects requires the optional CRAN
 #' package \href{https://cran.r-project.org/package=adegenet}{\pkg{adegenet}}.
-#' @description Read a genlight object into a tidy data frame and/or GDS object/file.
-#' Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
-#' and might be of interest for users.
+#' @description Import an \pkg{adegenet} \code{genlight} object, standardize its
+#' sample and marker metadata, and optionally produce tidy genomic data or a GDS
+#' representation.
 
 #' @param data (path or object) A genlight object in the global environment or
 #' path to a genlight file that will be open with \code{readRDS}.
@@ -20,11 +20,10 @@
 #' @param tidy (logical) Generate a tidy dataset.
 #' Default: \code{tidy = TRUE}.
 
-#' @param gds (optional, logical) To write a radiator gds object.
+#' @param gds Logical. Generate a genometranslator GDS representation.
 #' Default: \code{gds = TRUE}.
 
-#' @param write (optional, logical) To write in the working directory the tidy
-#' data. The file is written with \code{radiator_genlight_DATE@TIME.rad}.
+#' @param write Logical. Write the tidy table as an Arrow/Parquet file.
 #' Default: \code{write = FALSE}.
 
 #' @param verbose Logical indicating whether progress messages are emitted.
@@ -32,6 +31,16 @@
 #' 
 #' @export
 #' @rdname read_genlight
+#' @return With \code{tidy = TRUE}, a tidy tibble. With
+#' \code{tidy = FALSE, gds = TRUE}, the generated GDS result. With both options
+#' false, the original \code{genlight} object.
+#' @examples
+#' \dontrun{
+#' if (requireNamespace("adegenet", quietly = TRUE)) {
+#'   x <- readRDS("genotypes.genlight.rds")
+#'   genotypes <- genometranslator::read_genlight(x, gds = FALSE)
+#' }
+#' }
 
 #' @references Jombart T (2008) adegenet: a R package for the multivariate
 #' analysis of genetic markers. Bioinformatics, 24, 1403-1405.
@@ -40,22 +49,24 @@
 #' Bioinformatics, 27, 3070-3071.
 
 #' @details
-#' A string of the same dimension is generated when genlight:
+#' Missing marker fields are generated when necessary:
 #' \enumerate{
 #' \item \code{is.null(genlight@pop)}: pop will be integrated
 #' in the tidy dataset.
-#' \item \code{is.null(data@chromosome)}: CHROM1 will be integrated
+#' \item \code{is.null(data@chromosome)}: \code{DENOVO} is used
 #' in the tidy dataset.
 #' \item \code{is.null(data@loc.names)}: LOCUS1 to \code{ncol(genlight)}
 #' will be integrated in the tidy dataset.
 #' \item \code{is.null(data@position)}: an integer string of
 #' length = \code{ncol(genlight)} will be integrated in the tidy dataset.
 #' }
-#'
-#' \strong{Note: that if all CHROM, LOCUS and POS is missing the function will be terminated}
+#' Generated fields preserve a unique marker identifier but do not create
+#' reference-genome coordinates. When \code{loc.all} is unavailable, symbolic
+#' \code{REF = "0"} and \code{ALT = "1"} labels preserve the dosage orientation.
 
 
 #' @author Thierry Gosselin \email{thierrygosselin@@icloud.com}
+#' @template io-dependencies
 
 
 read_genlight <- function(
@@ -87,11 +98,16 @@ read_genlight <- function(
   tgbase::check_package(package = "adegenet")
 
   # Checking for missing and/or default arguments ------------------------------
-  if (missing(data)) rlang::abort("data argument required")
+  if (missing(data)) rlang::abort("A genlight object or RDS file is required.")
 
   # Import data ---------------------------------------------------------------
-  if (is.vector(data)) data <- readRDS(data)
-  if (class(data)[1] != "genlight") rlang::abort("Input is not a genlight object")
+  if (is.character(data) && length(data) == 1L) {
+    if (!file.exists(data)) rlang::abort("The genlight RDS file does not exist.")
+    data <- readRDS(data)
+  }
+  if (!inherits(data, "genlight")) rlang::abort("Input is not a genlight object.")
+  original.data <- data
+  requested.tidy <- isTRUE(tidy)
 
   if (verbose) message("genlight info:")
   # strata ?
@@ -111,7 +127,7 @@ read_genlight <- function(
   # Chromosome ?
   if (is.null(data@chromosome)) {
     if (verbose) message("    Chromosome/contig/scaffold: no")
-    data@chromosome <- factor(rep("CHROM1", n.markers))
+    data@chromosome <- factor(rep("DENOVO", n.markers))
     chrom.info <- FALSE
   } else {
     if (verbose) message("    Chromosome/contig/scaffold: yes")
@@ -140,12 +156,6 @@ read_genlight <- function(
   }
 
 
-  if (!chrom.info && !locus.info && !pos.info) {
-    rlang::abort("Tidying the genlight requires at least one of these 3 markers metadata:
-       CHROM (genlight@chromosome), LOCUS (genlight@loc.names) or POS (genlight@position)")
-  }
-
-
   # markers
   markers <- tibble::tibble(
     CHROM = data@chromosome,#adegenet::chromosome(data),
@@ -165,6 +175,11 @@ read_genlight <- function(
         REF = stringi::stri_sub(str = nuc.data, from = 1, to = 1),
         ALT = stringi::stri_sub(str = nuc.data, from = 3, to = 3)
       )
+  } else {
+    # genlight dosage is defined relative to its second allele even when the
+    # nucleotide labels were not retained. Symbolic labels preserve that
+    # orientation for tidy and GDS conversion.
+    markers %<>% dplyr::mutate(REF = "0", ALT = "1")
   }
 
   if (gds) tidy <- TRUE
@@ -243,17 +258,14 @@ read_genlight <- function(
     # if (verbose) message("Written: GDS filename: ", gds.filename)
   }# End gds genlight
 
-  if (tidy) {
-    return(tidy.data)
-  } else {
-    message("returning GDS filename")
-    return(gds.filename)
-  }
+  if (requested.tidy) return(tidy.data)
+  if (gds) return(gds.filename)
+  return(original.data)
 } # End read_genlight
 
 # write_genlight ----------------------------------------------------------------
 #' @name write_genlight
-#' @title Write a \code{genlight} object from: a tidy data frame, GDS file or object.
+#' @title Write a genlight object
 #' @section Dependencies:
 #' Required package dependencies are declared in DESCRIPTION and installed
 #' with genometranslator. Run `genometranslator_dependencies()` to inspect

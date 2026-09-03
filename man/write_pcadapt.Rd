@@ -2,8 +2,7 @@
 % Please edit documentation in R/write_pcadapt.R
 \name{write_pcadapt}
 \alias{write_pcadapt}
-\title{Write a \href{https://github.com/bcm-uga/pcadapt}{pcadapt}
-file from a tidy data frame}
+\title{Write a pcadapt file}
 \usage{
 write_pcadapt(
   data,

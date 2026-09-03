@@ -2,7 +2,7 @@
 % Please edit documentation in R/write_betadiv.R
 \name{write_betadiv}
 \alias{write_betadiv}
-\title{Write a betadiv file from a tidy data frame}
+\title{Write a betadiv file}
 \usage{
 write_betadiv(data)
 }

@@ -34,6 +34,18 @@ There are two ways to read or write data:
 * functions such as `read_vcf()`, `read_dart()`, and `write_bayescan()` expose
   arguments specific to a particular format.
 
+The package uses a GDS-first workflow. Readers return a file-backed GDS for
+formats such as VCF, DArT, and PLINK, allowing large datasets to be inspected,
+filtered, and translated without first creating one row per sample and marker
+in memory. Use `tidy_genome()` only when a downstream task specifically needs
+an in-memory table.
+
+The former `tidy_vcf()` convenience wrapper is no longer part of
+`genometranslator`. Use `read_genome()` for automatic format detection or
+`read_vcf()` for VCF-specific import controls. Apply genomic filters with
+`radr`, and call `tidy_genome()` separately if a table is required. The legacy
+`tidy_vcf()` implementation remains in `radiator` for historical workflows.
+
 The examples below are not evaluated because they refer to files supplied by
 the user.
 
@@ -282,6 +294,11 @@ shark_tidy <- tidy_genome(
   parallel.core = 8
 )
 ```
+
+Do not convert a whole-genome GDS merely as an import step. A tidy table has
+approximately one row per sample-marker combination and can therefore be much
+larger in memory than the file-backed GDS. Extract or materialize only the data
+needed by the downstream analysis.
 
 ## Reading DArT files
 

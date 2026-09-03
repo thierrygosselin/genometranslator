@@ -1,21 +1,16 @@
 # read_genepop------------------------------------------------------------------
 #' @name read_genepop
 
-#' @title Read a Genepop file into a tidy or wide data frame
+#' @title Read a Genepop file
 
-#' @description Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
-#' and might be of interest for users.
-#' The function \code{read_genepop} reads a file in the
-#' \href{https://genepop.curtin.edu.au/help_input.html}{genepop format}
-#' (see details and note for convention) and output a data frame in wide or long/tidy format.
-#'
-#' To manipulate and prune the dataset prior to tidying, use the functions
-#' \code{\link{tidy_genome}} and
-#' \code{\link{genome_translator}}, that uses blacklist and whitelist along
-#' several other filtering options.
+#' @description Import and validate diploid data in the Genepop text format.
+#' Both comma-separated locus names and one-locus-per-line headers are accepted,
+#' as are one-, two-, and three-digit allele codes. Population blocks, unique
+#' locus names, genotype-row widths, and genotype coding are checked before a
+#' long or wide tibble is returned.
 
-#' @param data A \href{https://genepop.curtin.edu.au/help_input.html}{genepop}
-#' filename with extension \code{.gen}.
+#' @param data Path to a Genepop file, commonly with extension \code{.gen}, or a
+#' one-column data frame containing its lines.
 
 #' @param strata (optional) A tab delimited file with 2 columns. Header:
 #' \code{INDIVIDUALS} and \code{STRATA}.
@@ -35,9 +30,18 @@
 #' in the global environment only (i.e. not written in the working directory).
 
 #' Default: \code{filename = NULL}.
-#' @return The output in your global environment is a wide or long/tidy data frame.
-#' If \code{filename} is provided, the wide or long/tidy data frame is also
-#' written to the working directory.
+#' @return A tibble in long form with \code{STRATA}, \code{INDIVIDUALS},
+#' \code{MARKERS}, and six-digit \code{GT}, or wide form when
+#' \code{tidy = FALSE}. If duplicate individual names are replaced, the
+#' original-to-generated mapping is stored in the \code{id_conversion}
+#' attribute. If \code{filename} is supplied, the table is also written as a
+#' tab-separated file.
+#'
+#' @section Field handling:
+#' Genepop population blocks become \code{STRATA}; cleaned sample names become
+#' \code{INDIVIDUALS}; locus names become \code{MARKERS}; and each allele is
+#' padded to three digits. Supplied strata metadata replaces embedded population
+#' blocks and must contain every Genepop individual.
 
 #' @details \href{https://genepop.curtin.edu.au/help_input.html}{genepop format}
 #' \enumerate{
@@ -107,7 +111,8 @@
 #' that you have several important genotypes and markers metadata
 #' (chromosome, locus, snp, position, read depth, allele depth, etc.) available,
 #' these are all lacking in the genepop format. This format is kept for archival
-#' reasons in radiator.
+#' reasons and data exchange. VCF or GDS should be preferred when sequencing
+#' likelihoods, depth, alleles, coordinates, and other metadata must be retained.
 
 #' @param verbose Logical indicating whether progress messages are emitted.
 #' Default: \code{verbose = FALSE}.
@@ -117,7 +122,7 @@
 #' @examples
 #' \dontrun{
 #' # We will use the genepop dataset provided with adegenet package
-#' require("adegenet")
+#' if (requireNamespace("adegenet", quietly = TRUE)) {
 #'
 #' # The simplest form of the function:
 #' nancycats.tidy <- genometranslator::read_genepop(
@@ -135,6 +140,7 @@
 #' ),
 #'     tidy = FALSE
 #' )
+#' }
 #' }
 
 
@@ -172,10 +178,11 @@ read_genepop <- function(
   on.exit(tgbase::teardown(.start), add = TRUE)
 
   # Checking for missing and/or default arguments-------------------------------
-  if (missing(data)) rlang::abort("genepop file missing")
+  if (missing(data)) rlang::abort("A Genepop file or table is required.")
 
   # Import data ------------------------------------------------------------------
-  if (is.vector(data)) {
+  if (is.character(data) && length(data) == 1L) {
+    if (!file.exists(data)) rlang::abort("The Genepop file does not exist.")
     data <- readr::read_delim(
       file = data,
       delim = "?",
@@ -183,12 +190,16 @@ read_genepop <- function(
       trim_ws = TRUE,
       col_names = "data",
       col_types = "c")
-  } else {
-    V1 <- NULL
-    data %<>%
-      dplyr::rename(.data = ., data = V1) %>%
+  } else if (inherits(data, "data.frame")) {
+    if (ncol(data) != 1L) {
+      rlang::abort("An in-memory Genepop table must contain exactly one column.")
+    }
+    names(data) <- "data"
+    data <- data %>%
       dplyr::slice(-1) %>% # removes genepop header
       tibble::as_tibble()
+  } else {
+    rlang::abort("`data` must be one Genepop file path or a one-column table.")
   }
 
   # Replace white space with only 1 space
@@ -205,6 +216,8 @@ read_genepop <- function(
   # Pop indices ----------------------------------------------------------------
   pop.indices <- which(data$data %in% c("Pop", "pop", "POP"))
   npop <- length(pop.indices)
+  if (!npop) rlang::abort("No Genepop population separator (`Pop`) was found.")
+  if (pop.indices[[1]] == 1L) rlang::abort("No locus names were found before the first `Pop` separator.")
 
   # Markers --------------------------------------------------------------------
   # With this function, it doesn't matter if the markers are on one row or one per row.
@@ -216,6 +229,9 @@ read_genepop <- function(
     replacement = "",
     vectorize_all = FALSE
   )
+  markers <- markers[nzchar(markers)]
+  if (!length(markers)) rlang::abort("The Genepop file contains no locus names.")
+  if (anyDuplicated(markers)) rlang::abort("Genepop locus names must be unique.")
 
   # Remove markers from the dataset --------------------------------------------
   data %<>% dplyr::slice(-(1:(pop.indices[1] - 1)))
@@ -230,10 +246,12 @@ read_genepop <- function(
 
   # Scan for genotypes split on 2 lines ----------------------------------------
   # looks for lines without a comma
-  problem <- which(!(1:length(data$data) %in% grep(",", data$data)))
+  problem <- which(!seq_along(data$data) %in% grep(",", data$data, fixed = TRUE))
   if (length(problem) > 0) {
     for (i in sort(problem, decreasing = TRUE)) {
-      # i <- problem
+      if (i == 1L) {
+        rlang::abort("A continued genotype row appears before any individual record.")
+      }
       data$data[i - 1] <- paste(data$data[i - 1], data$data[i], sep = " ")
     }
     data <- dplyr::slice(.data = data, -problem)
@@ -256,18 +274,18 @@ read_genepop <- function(
 
   # Check for duplicate individual names
   # some genepop format don't provide individuals
-  if (length(unique(individuals$INDIVIDUALS)) < nrow(individuals)) {
-    message("WARNING: Individual are not named correctly, please check your data")
-    message("radiator will generate unique id")
-    message("Conversion file to get back to your original naming scheme:\n", stringi::stri_join(getwd(),"/radiator_genepop_id_conversion.tsv"))
-
+  id.conversion <- NULL
+  if (anyDuplicated(individuals$INDIVIDUALS)) {
+    rlang::warn(c(
+      "Genepop individual identifiers are duplicated.",
+      "i" = "Unique genometranslator identifiers were generated; inspect the `id_conversion` attribute."
+    ))
     bad.id <- dplyr::select(individuals, BAD_ID = INDIVIDUALS) %>%
-      dplyr::mutate(INDIVIDUALS = stringi::stri_join("radiator-individual-", seq(1, nrow(.)))) %>%
+      dplyr::mutate(INDIVIDUALS = stringi::stri_join("genometranslator-individual-", seq_len(nrow(.)))) %>%
       dplyr::select(INDIVIDUALS, BAD_ID)
 
     individuals <- dplyr::select(bad.id, INDIVIDUALS)
-
-    readr::write_tsv(x = bad.id, file = "radiator_genepop_id_conversion.tsv")
+    id.conversion <- bad.id
   }
 
   # isolate the genotypes
@@ -296,8 +314,17 @@ read_genepop <- function(
 
   # create a data frame --------------------------------------------------------
   # separate the dataset by space
+  genotype.rows <- stringi::stri_split_fixed(str = data$GT, pattern = " ")
+  genotype.counts <- lengths(genotype.rows)
+  if (any(genotype.counts != length(markers))) {
+    bad.rows <- which(genotype.counts != length(markers))
+    rlang::abort(paste0(
+      "Genepop genotype count does not match the number of loci for individual row(s): ",
+      paste(utils::head(bad.rows, 10L), collapse = ", "), "."
+    ))
+  }
   data <- tibble::as_tibble(
-    do.call(rbind, stringi::stri_split_fixed(str = data$GT, pattern = " ")),
+    do.call(rbind, genotype.rows),
     .name_repair = "minimal"
   ) %>%
     magrittr::set_colnames(x = ., markers)
@@ -309,14 +336,16 @@ read_genepop <- function(
     #join strata and data
     individuals %<>%
       dplyr::left_join(
-        genometranslator::read_strata(strata = strata, pop.id = TRUE, verbose = FALSE) %$%
-          strata,
+        genometranslator::read_strata(strata = strata, verbose = FALSE) %$% strata,
         by = "INDIVIDUALS"
       )
+    if (anyNA(individuals$STRATA)) {
+      rlang::abort("Some Genepop individuals are absent from the supplied strata metadata.")
+    }
 
   } else {
     # add pop based on internal genepop: integer and reorder the columns
-    individuals %<>% dplyr::mutate(POP_ID = pop)
+    individuals %<>% dplyr::mutate(STRATA = pop)
   }
 
   # combine the individuals back to the dataset
@@ -324,7 +353,7 @@ read_genepop <- function(
   individuals <- NULL
 
   # Scan for genotype coding and tidy ------------------------------------------
-  gt.coding <- dplyr::select(.data = data, -INDIVIDUALS, -POP_ID) %>%
+  gt.coding <- dplyr::select(.data = data, -INDIVIDUALS, -STRATA) %>%
     purrr::flatten_chr(.) %>%
     unique(.) %>%
     nchar(.) %>%
@@ -334,53 +363,42 @@ read_genepop <- function(
     rlang::abort("Mixed genotype codings are not supported:
   use 1, 2 or 3 characters/numbers for alleles")
   } else {
-    if (gt.coding != 6) {
-      if (gt.coding == 4) gt.sep <- 2
-      if (gt.coding == 2) gt.sep <- 1
-
-
-      data <- tgbase::trans_long(
-        x = data,
-        cols = c("POP_ID", "INDIVIDUALS"),
-        names_to = "MARKERS",
-        values_to = "GT"
+    if (!gt.coding %in% c(2L, 4L, 6L)) {
+      rlang::abort("Genepop genotypes must use one-, two-, or three-digit alleles.")
+    }
+    gt.sep <- gt.coding / 2L
+    data <- tgbase::trans_long(
+      x = data,
+      cols = c("STRATA", "INDIVIDUALS"),
+      names_to = "MARKERS",
+      values_to = "GT"
+    ) %>%
+      tidyr::separate(
+        data = ., col = GT, into = c("A1", "A2"),
+        sep = gt.sep, remove = TRUE, extra = "drop"
       ) %>%
-        tidyr::separate(
-          data = ., col = GT, into = c("A1", "A2"),
-          sep = gt.sep, remove = TRUE, extra = "drop"
-        ) %>%
-        dplyr::mutate(
-          A1 = stringi::stri_pad_left(str = A1, pad = "0", width = 3),
-          A2 = stringi::stri_pad_left(str = A2, pad = "0", width = 3),
-          GT = stringi::stri_join(A1, A2, sep = ""),
-          A1 = NULL, A2 = NULL
-        ) %>%
-        dplyr::arrange(MARKERS, POP_ID, INDIVIDUALS)
+      dplyr::mutate(
+        A1 = stringi::stri_pad_left(str = A1, pad = "0", width = 3),
+        A2 = stringi::stri_pad_left(str = A2, pad = "0", width = 3),
+        GT = stringi::stri_join(A1, A2),
+        A1 = NULL, A2 = NULL
+      ) %>%
+      dplyr::arrange(MARKERS, STRATA, INDIVIDUALS)
 
-      if (!tidy) {
-        data %<>%
-          tgbase::trans_wide(
-            x = .,
-            formula = "POP_ID + NDIVIDUALS ~ MARKERS",
-            values_from = "GT"
-          )
-      }
-    } else {
-      if (tidy) {
-        data %<>%
-          tgbase::trans_long(
-            x = .,
-            cols = c("POP_ID", "INDIVIDUALS"),
-            names_to = "MARKERS",
-            values_to = "GT"
-          )
-      }
+    if (!tidy) {
+      data <- tgbase::trans_wide(
+        x = data,
+        formula = "STRATA + INDIVIDUALS ~ MARKERS",
+        values_from = "GT"
+      ) %>%
+        dplyr::arrange(STRATA, INDIVIDUALS)
     }
   }
 
   # writing to a file  ---------------------------------------------------------
   if (!is.null(filename)) readr::write_tsv(x = data, file = filename, col_names = TRUE)
 
+  if (!is.null(id.conversion)) attr(data, "id_conversion") <- id.conversion
   return(data)
 } # end read_genepop
 
@@ -388,7 +406,7 @@ read_genepop <- function(
 # write_genepop-----------------------------------------------------------------
 #' @name write_genepop
 
-#' @title Write a genepop file
+#' @title Write a Genepop file
 
 #' @description Write a genepop file from a tidy data frame or GDS file/object.
 #' Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}

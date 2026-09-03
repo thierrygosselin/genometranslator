@@ -1,7 +1,7 @@
 #' Check genometranslator dependencies
 #'
 #' Reports required and optional R packages and checks whether the optional
-#' \command{bcftools} executable is available. This function is intentionally
+#' \command{bcftools} and \command{plink2} executables are available. This function is intentionally
 #' diagnostic: it does not modify the R library or a Conda environment.
 #'
 #' @param verbose Logical. Print installation guidance for missing components.
@@ -46,13 +46,16 @@ genometranslator_dependencies <- function(verbose = TRUE) {
     quietly = TRUE
   )
 
-  bcftools <- tibble::tibble(
-    component = "bcftools",
+  executables <- tibble::tibble(
+    component = c("bcftools", "plink2"),
     source = "Conda, Homebrew, or system PATH",
     required = FALSE,
-    available = nzchar(Sys.which("bcftools"))
+    available = c(
+      nzchar(Sys.which("bcftools")),
+      nzchar(Sys.which("plink2"))
+    )
   )
-  result <- dplyr::bind_rows(packages, bcftools)
+  result <- dplyr::bind_rows(packages, executables)
 
   if (verbose && any(!result$available)) {
     message("Missing genometranslator components:")

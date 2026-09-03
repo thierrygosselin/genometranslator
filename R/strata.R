@@ -1,22 +1,20 @@
 # read_strata ----------------------------------------------------------------------------------
 #' @name read_strata
-#' @title read strata
-#' @description Read a strata object or file. The strata file contains thes
-#' individual's metadata, the stratification: e.g. the population id and/or
-#' the sampling sites (see details).
-#' Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
-#' and might be of interest for users.
+#' @title Read and prepare strata
+#' @description Import and prepare sample metadata for genomic analyses.
+#' In addition to reading a table, \code{read_strata()} standardizes identifiers,
+#' validates the population-level arguments, controls factor ordering and
+#' relabelling, selects populations, removes blacklisted individuals, and
+#' returns the resolved metadata and filtering configuration together.
+#'
+#' The prepared table can therefore be used as both sample metadata and a sample
+#' whitelist by downstream \pkg{genometranslator} functions.
 
-#' @param strata (path or object) The strata file or object.
-#' Additional documentation is available in \code{\link{read_strata}}.
-#' Use that function to whitelist/blacklist populations/individuals.
-#' Option to set \code{pop.levels/pop.labels} is also available.
+#' @param strata A data frame containing sample metadata, or the path to a
+#' tab-delimited metadata file. The required columns are \code{INDIVIDUALS} and
+#' \code{STRATA}; \code{POP_ID} is accepted as an alias for \code{STRATA}.
+#' Additional metadata columns are retained unless \code{keep.two = TRUE}.
 
-#' @param pop.id (logical) When \code{pop.id = TRUE}, the strata returns
-#' the stratification colname \code{POP_ID}.
-#' With the default, Returns \code{STRATA}.
-
-#' Default: \code{pop.id = FALSE}.
 #' @param pop.levels (optional, string) This refers to the levels in a factor. In this
 #' case, the id of the pop.
 #' Use this argument to have the pop ordered your way instead of the default
@@ -59,32 +57,68 @@
 
 #' @param filename (optional, character) If \code{!is.null(blacklist.id) ||
 #' !is.null(pop.select)}, the modified strata is written by default in the
-#' working directory with date and time appended to \code{strata_radiator_filtered},
+#' working directory with date and time appended to
+#' \code{strata_genometranslator_filtered},
 #' to make the file unique. If you plan on writing more than 1 strata file per minute,
 #' use this argument to supply the unique filename. When filename is not NULL, it
 #' will also trigger saving the strata to a file.
 #' Default: \code{filename = NULL}.
 
 
-#' @details The strata file used in radiator is a tab delimited file with
-#' a minimum of 2 columns headers (3 for DArT data users):
-#' \code{INDIVIDUALS} and \code{STRATA}.
-#' If a \code{strata} file is specified with all file formats that don't
-#' require it, the strata argument will have precedence on the population
-#' groupings used internally in those file formats. For file formats without
-#' population/strata groupings (e.g. vcf, haplotype files) if no strata file is
-#' provided, 1 pop/strata grouping will automatically be created.
-#' For vcf and haplotypes file, the strata can also be used as a whitelist of id.
-#' Samples not in the strata file will be discarded from the data set.
-#' The \code{STRATA} column can be any hierarchical grouping.
-#' To create a strata file see \code{\link{individuals2strata}}.
-#' If you have already run
-#' \href{http://catchenlab.life.illinois.edu/stacks/}{stacks} on your data,
-#' the strata file is similar to a stacks \emph{population map file},
-#' make sure you
-#' have the required column names (\code{INDIVIDUALS} and \code{STRATA}).
-#' The strata column is cleaned of a white spaces that interfere with some
-#' packages or codes: space is changed to an underscore \code{_}.
+#' @details The minimum table contains \code{INDIVIDUALS} and \code{STRATA}.
+#' \code{STRATA} can represent populations, sampling sites, sequencing batches,
+#' families, or another grouping appropriate to the analysis. Other descriptive
+#' columns are preserved as sample metadata.
+#'
+#' \code{read_strata()} performs the following preparation:
+#' \enumerate{
+#' \item reads every input column as character data when \code{strata} is a file;
+#' \item renames \code{POP_ID} to \code{STRATA} when \code{STRATA} is absent;
+#' \item checks that the input is tabular, contains both required columns and at
+#' least one row, and has no missing or empty sample or group identifiers;
+#' \item standardizes \code{INDIVIDUALS} with \code{\link{clean_ind_names}} and
+#' replaces spaces in \code{STRATA}, level, label, and selection values with
+#' underscores;
+#' \item checks that \code{pop.labels} has a corresponding \code{pop.levels}
+#' value and that both vectors have equal length;
+#' \item establishes the \code{STRATA} factor order and optionally relabels or
+#' combines groups;
+#' \item removes individuals supplied through \code{blacklist.id} and retains
+#' only groups supplied through \code{pop.select};
+#' \item standardizes DArT \code{TARGET_ID}, when present, and sorts rows by
+#' \code{STRATA} and \code{INDIVIDUALS}; and
+#' \item writes the prepared table when filtering changed it or when
+#' \code{filename} is supplied.
+#' }
+#'
+#' When passed to an importer, the prepared strata table takes precedence over
+#' population assignments embedded in the genomic format. It also acts as a
+#' sample whitelist: samples absent from the table are not retained by importers
+#' that use strata for matching, including VCF and haplotype workflows.
+#'
+#' A Stacks population map can be used after its columns are named
+#' \code{INDIVIDUALS} and \code{STRATA}. To construct metadata from sample names,
+#' see \code{\link{individuals2strata}}.
+#'
+#' @section Column handling:
+#' \describe{
+#' \item{\code{INDIVIDUALS}}{Required. Converted to character and standardized
+#' with \code{\link{clean_ind_names}}: underscores and colons become hyphens,
+#' while spaces and commas are removed. Missing and empty identifiers are
+#' rejected.}
+#' \item{\code{STRATA}}{Required canonical grouping column. Converted to a
+#' factor after spaces are replaced with underscores. Its levels can be ordered,
+#' relabelled, combined, or selected with \code{pop.levels}, \code{pop.labels},
+#' and \code{pop.select}. Missing and empty values are rejected. The returned
+#' column is always named \code{STRATA}.}
+#' \item{\code{POP_ID}}{Accepted only as an input alias when \code{STRATA} is
+#' absent. It is renamed to \code{STRATA} during preparation.}
+#' \item{\code{TARGET_ID}}{Optional DArT identifier. Converted to uppercase and
+#' standardized with \code{\link{clean_ind_names}}.}
+#' \item{Other columns}{Preserved without renaming or recoding and returned as
+#' additional sample metadata. Set \code{keep.two = TRUE} to retain only
+#' \code{INDIVIDUALS} and \code{STRATA}.}
+#' }
 #'
 #' For DArT data see \code{\link{read_dart}}
 #'
@@ -110,30 +144,31 @@
 #' Default: \code{verbose = FALSE}.
 #'
 #' @export
-#' @return \strong{A list} with several components:
-#' \enumerate{
-#' \item $strata
-#' \item $pop.levels
-#' \item $pop.labels
-#' \item $pop.select
-#' \item $blacklist.id
+#' @return A list containing:
+#' \describe{
+#' \item{\code{strata}}{The standardized, ordered, and optionally filtered
+#' sample-metadata table.}
+#' \item{\code{pop.levels}}{The resolved order of the \code{STRATA} factor.}
+#' \item{\code{pop.labels}}{The resolved group labels, when supplied.}
+#' \item{\code{pop.select}}{The standardized population selection.}
+#' \item{\code{blacklist.id}}{The standardized individual blacklist.}
 #' }
 #' @examples
 #' \dontrun{
 #' strata.info <- genometranslator::read_strata(strata)
 #'
-#' # the return object is a list with 5 objects:
+#' # The result contains the prepared table and the resolved settings.
 #' names(strata.info)
 #'
 #' # to get the strata
 #' new.strata <- strata.info$strata
 #'
-#' # if naything is changed from the original strata, a new strata file is
-#' # generated automatically:
+#' # Filtering the metadata also writes the prepared strata table.
 #'
 #' new.strata <- genometranslator::read_strata(
 #'     strata = strata,
-#'     blacklist.id = "blacklisted.ids.tsv"
+#'     blacklist.id = "blacklisted.ids.tsv",
+#'     pop.select = c("TAS", "SA")
 #'     )
 #'
 #' }
@@ -141,7 +176,6 @@
 
 read_strata <- function(
     strata,
-    pop.id = FALSE,
     pop.levels = NULL,
     pop.labels = NULL,
     pop.select = NULL,
@@ -162,14 +196,17 @@ read_strata <- function(
   if (missing(strata)) rlang::abort("\nMissing strata argument...\n")
   # file.date <- format(Sys.time(), "%Y%m%d@%H%M")
 
-  # required for some radiator function when strata is not there
+  # Some genometranslator importers permit missing sample metadata.
   if (is.null(strata)) return(NULL)
 
   if (!is.null(strata)) {
     if (verbose) message("Reading strata")
 
-    if (is.vector(strata)) {
-      if (!file.exists(strata)) rlang::abort("strata file doesn't exist.")
+    if (is.character(strata)) {
+      if (length(strata) != 1L) {
+        rlang::abort("`strata` must be one file path or one data-frame object.")
+      }
+      if (!file.exists(strata)) rlang::abort("The strata file does not exist.")
       # now using vroom because its faster
       strata <- vroom::vroom(
         file = strata,
@@ -182,6 +219,29 @@ read_strata <- function(
       colnames(strata) <- stringi::stri_replace_all_fixed(
         colnames(strata), "POP_ID", "STRATA",
         vectorize_all = FALSE)
+    }
+
+    if (!inherits(strata, "data.frame")) {
+      rlang::abort("`strata` must be a data frame or a tabular file path.")
+    }
+    required.columns <- c("INDIVIDUALS", "STRATA")
+    missing.columns <- setdiff(required.columns, names(strata))
+    if (length(missing.columns)) {
+      rlang::abort(paste0(
+        "Strata metadata is missing required column(s): ",
+        paste(missing.columns, collapse = ", "), "."
+      ))
+    }
+    if (!nrow(strata)) rlang::abort("Strata metadata contains no individuals.")
+    invalid.individuals <- is.na(strata$INDIVIDUALS) |
+      !nzchar(trimws(as.character(strata$INDIVIDUALS)))
+    invalid.strata <- is.na(strata$STRATA) |
+      !nzchar(trimws(as.character(strata$STRATA)))
+    if (any(invalid.individuals)) {
+      rlang::abort("`INDIVIDUALS` contains missing or empty identifiers.")
+    }
+    if (any(invalid.strata)) {
+      rlang::abort("`STRATA` contains missing or empty group identifiers.")
     }
 
     # necessary for some analysis
@@ -271,10 +331,6 @@ read_strata <- function(
     if (verbose) message("Number of strata: ", length(unique(strata$STRATA)))
     if (verbose) message("Number of individuals: ", length(unique(strata$INDIVIDUALS)))
 
-    # POP_ID is still currently used but will be deprecated soon
-    # so I keep it for now
-    if (isTRUE(pop.id)) strata %<>% dplyr::rename(POP_ID = STRATA)
-
     if (!is.null(pop.select)) {
       if (verbose) message("Strata selected: ", stringi::stri_join(pop.select, collapse = ", "), " (", n.pop.new," strata)")
     }
@@ -288,7 +344,7 @@ read_strata <- function(
     if (!is.null(filename)) {
       write.strata <- TRUE
     } else {
-      filename <- "strata_radiator_filtered"
+      filename <- "strata_genometranslator_filtered"
     }
 
     if (write.strata) {
@@ -761,7 +817,7 @@ strata_haplo <- function(strata = NULL, data = NULL, blacklist.id = NULL) {
 
 # read_blacklist_id -----------------------------------------------------------------
 #' @name read_blacklist_id
-#' @title read_blacklist_id
+#' @title Read an individual blacklist
 #' @description Read a file or object with blacklisted individuals.
 #' Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
 #' and might be of interest for users.
