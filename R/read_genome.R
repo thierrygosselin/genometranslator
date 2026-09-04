@@ -381,10 +381,11 @@ write_genome <- function(
   if (is.null(output) && !is.null(filename)) {
     lower.filename <- tolower(filename)
     output <- dplyr::case_when(
-      grepl("\\.vcf(?:\\.gz)?$", lower.filename) ~ "vcf",
+      grepl("\\.(?:vcf(?:\\.gz)?|bcf)$", lower.filename) ~ "vcf",
       grepl("\\.gds$", lower.filename) &&
         !inherits(data, "SeqVarGDSClass") ~ "gds",
       grepl("\\.gen$", lower.filename) ~ "genepop",
+      grepl("\\.arp$", lower.filename) ~ "arlequin",
       grepl("\\.pgen$", lower.filename) ~ "pgen",
       grepl("\\.bed$", lower.filename) ~ "bed",
       grepl("\\.ped$", lower.filename) ~ "ped",

@@ -4,57 +4,77 @@
 \alias{write_arlequin}
 \title{Write an Arlequin file}
 \usage{
-write_arlequin(data, pop.levels = NULL, filename = NULL, ...)
+write_arlequin(
+  data,
+  pop.levels = NULL,
+  filename = NULL,
+  strata = NULL,
+  group.column = "STRATA",
+  path.folder = getwd(),
+  chunk.size = 32L,
+  overwrite = FALSE,
+  verbose = TRUE
+)
 }
 \arguments{
-\item{data}{A tidy data frame object in the global environment or
-a tidy data frame in wide or long format in the working directory.
-\emph{How to get a tidy data frame ?}
-Look into \pkg{genometranslator} \code{\link{tidy_genome}}.}
+\item{data}{A GDS filepath or open \code{SeqVarGDSClass} connection.}
 
-\item{pop.levels}{(optional, string) A character string with your populations ordered.
-Default: \code{pop.levels = NULL}.}
+\item{pop.levels}{Complete population order; never a population filter.}
 
-\item{filename}{(optional) The file name prefix for the arlequin file
-written to the working directory. With default: \code{filename = NULL},
-the filename generated follow this \code{radiator_arlequin_DATE@TIME.csv}.
-Default: \code{filename = NULL}.}
+\item{filename}{Output basename, optionally ending in \code{.arp}.}
 
-\item{...}{other parameters passed to the function.}
+\item{strata}{Sample metadata data frame or TSV file. NULL uses GDS metadata.
+Must cover every active sample, with unique \code{INDIVIDUALS} identifiers.}
+
+\item{group.column}{Population column in sample metadata.}
+
+\item{path.folder}{Output directory.}
+
+\item{chunk.size}{Number of individuals read per block.}
+
+\item{overwrite}{Replace existing output files.}
+
+\item{verbose}{Display messages, wrapped to 80 columns.}
 }
 \value{
-An arlequin file is saved to the working directory.
+Invisibly, a list of output paths, sample/population maps, and
+exported variant IDs. The input GDS is not modified.
 }
 \description{
-Write a arlequin file from a tidy data frame.
-Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
-and \href{https://github.com/thierrygosselin/assigner}{assigner}
-and might be of interest for users.
+Export active diploid GDS genotypes as an Arlequin project,
+with sample, population, and allele-code mapping tables.
 }
-\section{Data filtering}{
+\details{
+Writes diploid \code{STANDARD} data with unknown gametic phase.
+Individuals have frequency one and two allele rows. Missing alleles are \verb{?},
+matching the profile declaration. Each biallelic or multiallelic record is
+one locus, with REF coded 1 and successive ALTs coded 2, 3, etc. Original
+sequences are recorded in the allele map. Phase is not exported. Haploid,
+polyploid, and presence/absence data are not supported.
 
-This writer does not silently filter markers or individuals. It may validate
-requirements imposed by the destination format and stop with an informative
-error when the input is unsuitable. It is the user's responsibility to
-filter and quality-control the data appropriately for the intended analysis
-before generating the output. Use
-\href{https://thierrygosselin.github.io/radr/}{\pkg{radr}} or another
-suitable workflow when filtering is required.
+Exports the intersection of active selections and metadata whitelists.
+Temporary selections are restored on success or error. Filepaths are opened
+read-only and closed; caller-owned connections remain open. Safe identifiers
+replace sample/population names in the project; mapping tables retain the
+original names. The Structure section puts all populations in one group,
+without inferring a biological hierarchy.
 }
-
-\section{Dependencies}{
-
-Required package dependencies are declared in \code{DESCRIPTION} and are
-installed with \pkg{genometranslator}. Any additional dependency needed only
-for this format or option is identified in this help page. Use
-\code{genometranslator_dependencies()} to inspect the availability of core
-packages, optional packages, and external executables.
+\examples{
+\dontrun{
+export <- genometranslator::write_arlequin(
+  "study.gds", strata = "samples.tsv", filename = "study",
+  path.folder = "exports"
+)
+export$files
 }
-
+}
 \references{
-Excoffier, L.G. Laval, and S. Schneider (2005)
+Excoffier, L., Laval, G., and Schneider, S. (2005).
 Arlequin ver. 3.0: An integrated software package for population genetics
-data analysis. Evolutionary Bioinformatics Online 1:47-50.
+data analysis. Evolutionary Bioinformatics Online, 1, 47-50.
+
+Official Arlequin format specification (sections 4 and 5):
+\url{https://cmpg.unibe.ch/software/arlequin3522/man/Arlequin35.pdf}
 }
 \author{
 Thierry Gosselin \email{thierrygosselin@icloud.com}

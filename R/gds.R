@@ -1571,7 +1571,7 @@ extract_markers_metadata <- function(
 
   mk.col <- dplyr::intersect(colnames(markers.meta), c("CHROM", "LOCUS", "POS"))
   markers.meta %<>%
-    dplyr::mutate(dplyr::across(.cols = mk.col, .fns = as.character))
+    dplyr::mutate(dplyr::across(.cols = dplyr::all_of(mk.col), .fns = as.character))
 
   # FILTERS handling -----------------------------------------------------------
   if (!whitelist && !blacklist && !rlang::has_name(markers.meta, "FILTERS")) {

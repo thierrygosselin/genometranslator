@@ -29,6 +29,24 @@
 #' @param data (character)
 #' Path to a VCF file (optionally bgzipped, \code{*.vcf} or \code{*.vcf.gz}).
 #' Markers can be biallelic SNPs or haplotypes.
+#' @section Future work:
+#' TODO: add explicit support for blocked gVCF. This is not currently supported
+#' by this interface. Planned work includes caller-specific block handling,
+#' preservation of block boundaries and depth/quality summaries, and
+#' block-aware counting of eligible invariant bases for SFS export.
+#' Missing or uncovered positions must not be treated as reference calls.
+#' Expanding blocks cannot restore original per-base quality measurements.
+#'
+#' @param all.sites NULL (default) detects invariant records automatically.
+#' TRUE declares a site-level variant-and-invariant VCF; FALSE rejects
+#' invariant records. This does not assert that every genomic base is callable.
+#' Invariant records and missing genotypes are retained. The GDS stores
+#' `vcf.site.content` metadata and a `SITE_TYPE` marker column. Counts describe
+#' imported records, before optional filtering. ALT-bearing records can still
+#' be monomorphic after sample selection. Existing caller provenance is unchanged.
+#' gVCF reference blocks must be converted to site-level VCF first.
+#' All-sites input requires `filter.haplotype.format = FALSE`. For SFS work,
+#' do not subsequently remove invariant sites or filter by MAF/MAC.
 #'
 #' @param strata (optional)
 #' Strata definition, passed to \code{\link{read_strata}}.
@@ -182,8 +200,14 @@ read_vcf <- function(
     vcf.stats     = FALSE,
     parallel.core = parallel::detectCores() - 1,
     verbose       = TRUE,
+    all.sites     = NULL,
     ...
 ) {
+
+  if (!is.null(all.sites) &&
+      (!is.logical(all.sites) || length(all.sites) != 1L || is.na(all.sites))) {
+    stop("all.sites must be NULL, TRUE or FALSE.")
+  }
 
   # Common startup -------------------------------------------------------------
   .start <- tgbase::startup(
@@ -365,6 +389,9 @@ read_vcf <- function(
   check.header <- detect.source$check.header
   dp <- "DP" %in% check.header$format$ID # Check that DP is valid
   markers.info <- detect.source$markers.info
+  # Preserve END when declared so reference blocks cannot masquerade as sites.
+  if (!is.null(markers.info) && "END" %in% check.header$info$ID)
+    markers.info <- unique(c(markers.info, "END"))
   overwrite.metadata <- detect.source$overwrite.metadata # may be NULL
   vcf.provenance <- .vcf_provenance_table(
     file = file.origin,
@@ -447,6 +474,9 @@ read_vcf <- function(
   }
 
   # no longer needed
+  import.complete <- FALSE
+  on.exit(if (!import.complete) try(SeqArray::seqClose(gds), silent = TRUE),
+    add = TRUE)
   vcf_read_temp <- data.safe <- safe_vcf_read <- parallel.temp <- NULL
   check.header <- detect.source <- markers.info <- overwrite.metadata <- NULL
 
@@ -462,6 +492,38 @@ read_vcf <- function(
   update_genome_gds(gds = gds, node.name = "input.file",  value = file.origin)
   update_genome_gds(gds = gds, node.name = "data.source", value = data.source)
   update_genome_gds(gds = gds, node.name = "vcf.provenance", value = vcf.provenance)
+
+  site.types <- .vcf_site_types(SeqArray::seqGetData(gds, "allele"))
+  if (any(site.types == "GVCF_REFERENCE")) {
+    stop("gVCF reference alleles require conversion to site-level VCF first.")
+  }
+  observed.invariant <- any(site.types == "INVARIANT_RECORD")
+  end.node <- gdsfmt::index.gdsn(gds, "annotation/info/END", silent = TRUE)
+  if (!is.null(end.node)) {
+    ends <- SeqArray::seqGetData(gds, "annotation/info/END")
+    positions <- SeqArray::seqGetData(gds, "position")
+    if (length(ends) == length(positions) && any(
+        site.types == "INVARIANT_RECORD" & ends > positions, na.rm = TRUE))
+      stop("Reference blocks with END require conversion to site-level VCF first.")
+  }
+  if (identical(all.sites, FALSE) && observed.invariant) {
+    stop("Invariant records detected: use all.sites = TRUE or NULL.")
+  }
+  all.sites <- isTRUE(all.sites) || observed.invariant
+  if (all.sites && isTRUE(filter.haplotype.format)) {
+    stop("All-sites import requires filter.haplotype.format = FALSE.")
+  }
+  update_genome_gds(gds, node.name = "vcf.site.content", value = tibble::tibble(
+    ALL_SITES = all.sites,
+    INVARIANT_RECORDS = sum(site.types == "INVARIANT_RECORD"),
+    SNP_RECORDS = sum(site.types == "SNP"),
+    OTHER_RECORDS = sum(site.types %in% c("OTHER", "SYMBOLIC")),
+    SCOPE = "Imported records; not a guarantee of genome-wide callability"
+  ))
+  if (verbose && all.sites) {
+    message("All-sites VCF: preserving invariant records and missing calls.")
+    message("Avoid monomorphic and MAF/MAC filtering when preparing an SFS.")
+  }
 
 
   # Sample IDs -----------------------------------------------------------------
@@ -616,6 +678,8 @@ read_vcf <- function(
   )
 
   markers.meta   <- cleaned.vcf.meta$markers.meta
+  markers.meta$SITE_TYPE <- site.types[match(markers.meta$VARIANT_ID,
+    SeqArray::seqGetData(gds, "variant.id"))]
   detect.strand  <- cleaned.vcf.meta$detect.strand
   cleaned.vcf.meta <- NULL
 
@@ -970,6 +1034,7 @@ if (verbose) message("VCF-specific filters")
 
   message("radiator Genomic Data Structure (GDS) file: ", basename(filename))
 
+  import.complete <- TRUE
   return(gds)
 } # End read_vcf
 
@@ -1108,56 +1173,9 @@ choose_markers_subsample_prop <- function(n.markers,
 # write_vcf---------------------------------------------------------------------
 # write a vcf file from a tidy data frame
 
-#' @name write_vcf
-#' @title Write a VCF file
-#' @description Write a vcf file (file format version 4.3, see details below)
-#' from a tidy data frame.
-#' Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
-#' and might be of interest for users.
-#' This writer translates the supplied calls; it does not apply VCF quality
-#' filters. Resolve marker, sample, genotype-quality, and missingness filtering
-#' before export according to the downstream use of the VCF.
+# Legacy tidy implementation used by the public encoding-aware writer.
 
-#' @param data A tidy data frame object in the global environment or
-#' a tidy data frame in wide or long format in the working directory.
-#' \emph{How to get a tidy data frame ?}
-#' Look into \pkg{genometranslator} \code{\link{tidy_genome}}.
-
-#' @param source source of vcf
-#' Default: \code{source = NULL}.
-#' @param empty generate an empty vcf.
-#' Default: \code{empty = FALSE}.
-#' @param strata (optional, logical) Should the strata information be
-#' included in the FORMAT field (along the GT info for each samples ?). To make
-#' the VCF population-ready use \code{strata = TRUE}. The strata information
-#' must be included in the \code{STRATA} column of the tidy dataset.
-#' Default: \code{strata = FALSE}. Experimental.
-
-#' @param filename (optional) The file name prefix for the vcf file
-#' written to the working directory. With default: \code{filename = NULL},
-#' the date and time is appended to \code{radiator_vcf_file_}.
-
-#' Default: \code{filename = NULL}.
-#' @details \strong{VCF file format version:}
-#'
-#' If you need a different file format version than the current one, just change
-#' the version inside the newly created VCF, that should do the trick.
-#' \href{https://vcftools.github.io/specs.html}{For more
-#' information on Variant Call Format specifications}.
-
-
-#' @export
-#' @rdname write_vcf
-
-#' @references Danecek P, Auton A, Abecasis G et al. (2011)
-#' The variant call format and VCFtools.
-#' Bioinformatics, 27, 2156-2158.
-
-#' @author Thierry Gosselin \email{thierrygosselin@@icloud.com}
-#' @template writer-filtering
-#' @template io-dependencies
-
-write_vcf <- function(
+.write_vcf_tidy <- function(
     data,
     strata = FALSE,
     filename = NULL,
@@ -1255,8 +1273,8 @@ write_vcf <- function(
     if (ref.change) {
       output %<>%
         dplyr::mutate(
-          REF = dplyr::recode(REF, "A" = "001", "C" = "002", "G" = "003", "T" = "004"),
-          ALT = dplyr::recode(ALT, "A" = "001", "C" = "002", "G" = "003", "T" = "004")
+          REF = dplyr::recode(REF, "001" = "A", "002" = "C", "003" = "G", "004" = "T"),
+          ALT = dplyr::recode(ALT, "001" = "A", "002" = "C", "003" = "G", "004" = "T")
         )
     }
 
@@ -1270,7 +1288,7 @@ write_vcf <- function(
     output %<>%
       dplyr::arrange(CHROM, LOCUS, POS) %>%
       dplyr::select(-MARKERS) %>%
-      dplyr::select('#CHROM' = CHROM, POS, ID = LOCUS, REF, ALT, QUAL, FILTER, INFO, FORMAT, id.string)
+      dplyr::select('#CHROM' = CHROM, POS, ID = LOCUS, REF, ALT, QUAL, FILTER, INFO, FORMAT, dplyr::all_of(id.string))
   }
 
   # Filename ------------------------------------------------------------------
@@ -1325,6 +1343,14 @@ write_vcf <- function(
   }
 
 
+  # BCF requires contigs to be declared in the header.
+  if (!empty) {
+    contigs <- unique(as.character(output[["#CHROM"]]))
+    if (anyNA(contigs) || any(grepl("[[:space:],<>]", contigs)))
+      stop("Invalid VCF contig identifiers in tidy input.")
+    cat(paste0("##contig=<ID=", contigs, ">\n"), file = filename,
+      append = TRUE, sep = "")
+  }
   # Info field 1 ---------------------------------------------------------------
   info1 <- as.data.frame('##INFO=<ID=NS,Number=1,Type=Integer,Description=\"Number of Samples With Data\">')
   utils::write.table(x = info1, file = filename, sep = " ", append = TRUE, col.names = FALSE, row.names = FALSE, quote = FALSE)
@@ -1337,7 +1363,7 @@ write_vcf <- function(
 
   # Format field 2 ---------------------------------------------------------------
   if (strata && !empty) {
-    format2 <- as.data.frame('##FORMAT=<ID=POP_ID,Number=1,Type=Character,Description="Population identification of Sample">')
+    format2 <- as.data.frame('##FORMAT=<ID=POP,Number=1,Type=String,Description="Population identification of Sample">')
     utils::write.table(x = format2, file = filename, sep = " ", append = TRUE, col.names = FALSE, row.names = FALSE, quote = FALSE)
   }
 

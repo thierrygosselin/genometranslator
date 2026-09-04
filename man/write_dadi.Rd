@@ -2,106 +2,113 @@
 % Please edit documentation in R/write_dadi.R
 \name{write_dadi}
 \alias{write_dadi}
-\title{Write a dadi file}
+\title{Write a dadi spectrum}
 \usage{
 write_dadi(
   data,
-  fasta.ingroup = NULL,
-  fasta.outgroup = NULL,
-  sumstats.ingroup = NULL,
-  sumstats.outgroup = NULL,
-  dadi.input.filename = NULL,
-  calibrate.alleles = FALSE
+  strata = NULL,
+  group.column = "STRATA",
+  pop.levels = NULL,
+  folded = TRUE,
+  ancestral.alleles = NULL,
+  invariant.sites = 0,
+  filename = NULL,
+  path.folder = getwd(),
+  chunk.size = 1000L,
+  max.cells = 1e+07,
+  overwrite = FALSE,
+  verbose = TRUE,
+  mask.corners = TRUE
 )
 }
 \arguments{
-\item{data}{A tidy data frame object in the global environment or
-a tidy data frame in wide or long format in the working directory.
-\emph{How to get a tidy data frame ?}
-Look into \pkg{genometranslator} \code{\link{tidy_genome}}.}
+\item{data}{A GDS filepath or open \code{SeqVarGDSClass} connection.}
 
-\item{fasta.ingroup}{(optional) The fasta file, sequences for the ingroup.
-Leave empty if no outgroup.
-Default: \code{fasta.ingroup = NULL}.}
+\item{strata}{Sample metadata data frame or TSV; NULL uses GDS metadata.}
 
-\item{fasta.outgroup}{(optional) The fasta file, sequences for the outgroup.
-Default: \code{fasta.outgroup = NULL}.}
+\item{group.column}{Population column in sample metadata.}
 
-\item{sumstats.ingroup}{(optional) The sumstats output file from STACKS
-when running STACKS for the ingroup fasta file.This file is
-required to use with an outgroup. Leave empty if no outgroup.
-Default: \code{sumstats.ingroup = NULL}.}
+\item{pop.levels}{Complete population order, matching the fastsimcoal model.
+Default is first appearance among active GDS samples.}
 
-\item{sumstats.outgroup}{(optional) The sumstats output file from STACKS
-when running STACKS for the outgroup fasta file. This file is
-required to use an outgroup.
-Default: \code{sumstats.outgroup = NULL}.}
+\item{folded}{Write a minor-allele spectrum (\verb{_MSFS.obs}). FALSE writes a
+derived-allele spectrum (\verb{_DSFS.obs}) and requires ancestral alleles.}
 
-\item{dadi.input.filename}{(optional) Name of the \code{dadi} SNP input file
-written to the working directory. e.g. \code{dadi.file.tsv}.
-Default use date and time to make the file. If used, the file extension
-need to finish with \code{.tsv or .txt}.
-Default: \code{dadi.input.filename = NULL}.}
+\item{ancestral.alleles}{Data frame with unique \code{VARIANT_ID} and \code{ANCESTRAL}
+columns. Ancestral bases must match REF or ALT; unknown/mismatched states
+are excluded and audited. REF is never assumed ancestral automatically.}
 
-\item{calibrate.alleles}{(optional, logical) To re-calibrate REF an ALT alleles.
-Will be done automatically to the dataset if the required genomic format is
-not found. Please use if you have removed individuals.
-Default: \code{calibrate.alleles = FALSE}.}
+\item{invariant.sites}{Number of additional callable invariant sites absent
+from the input records, added to the all-zero bin. For unfolded spectra,
+these must be ancestral in all exported samples. Never include sites already
+represented in the GDS, filtered SNPs, or uncallable bases in this count.}
+
+\item{filename}{Output basename without the \code{.fs} suffix.}
+
+\item{path.folder}{Output directory.}
+
+\item{chunk.size}{Number of variants read per genotype block.}
+
+\item{max.cells}{Maximum number of joint-SFS cells, guarding memory use.}
+
+\item{overwrite}{Replace existing output files.}
+
+\item{verbose}{Display messages wrapped to 80 columns.}
+
+\item{mask.corners}{Mask the all-ancestral and all-derived cells (default
+TRUE), as normally required for dadi inference. Counts remain in the file
+and audit even when masked. Folded spectra additionally mask cells above
+half the pooled chromosome count. Set FALSE only for a model that explicitly
+handles the monomorphic cells.}
 }
 \value{
-The function returns tibble and the dadi input file in the working
-directory.
+Invisibly, output paths, population mapping, flattened spectrum,
+dimensions, mask, per-record audit, and export parameters.
 }
 \description{
-This function will generate a \code{dadi} SNP input file using a
-radiator tidy tibble.
-
-Note that missing data can potentially bias demographic inference,
-consequently you might want to check the impact of missing data by running
-two datset in \code{dadi}: one with the missing data or several with varying thresholds
-of missingness, and one with imputed genotypes
-(check my other package \href{https://thierrygosselin.github.io/grur/}{grur} for this).
+Build a joint site-frequency spectrum from active diploid GDS
+calls and write a native dadi \code{.fs} file. Replaces the legacy tidy-data SNP
+table writer; the old FASTA and sumstats arguments are no longer used.
 }
-\section{Data filtering}{
+\details{
+Uses the same site selection and global folding as
+\code{\link[=write_fastsimcoal]{write_fastsimcoal()}}. Complete calls are required in every selected sample;
+no imputation, projection, or likelihood-based estimation is performed.
+Eligible invariant records are counted automatically, including in an
+all-sites GDS. Missing genotypes are never replaced with reference calls.
+For an unfolded spectrum, supply ancestral alleles for invariant records
+as well as SNPs. REF is not assumed ancestral.
 
-This writer does not silently filter markers or individuals. It may validate
-requirements imposed by the destination format and stop with an informative
-error when the input is unsuitable. It is the user's responsibility to
-filter and quality-control the data appropriately for the intended analysis
-before generating the output. Use
-\href{https://thierrygosselin.github.io/radr/}{\pkg{radr}} or another
-suitable workflow when filtering is required.
+Population IDs in the file are P1, P2, etc.; the population sidecar maps
+these IDs to the original names in \code{pop.levels} order. Dimensions are
+chromosome counts plus one; the last population varies fastest.
+Load in Python with \code{dadi.Spectrum.from_file("study.fs")}.
+
+Counts of reported calls are not independent evidence of callability.
+Review missingness, caller thresholds, ascertainment and upstream filtering
+before inference. MAC/MAF filtering changes the SFS. Invariant sites alone
+do not establish an unbiased callable-site denominator.
+Input data and selections are preserved; existing files require overwrite.
 }
+\section{Future work}{
 
-\section{Dependencies}{
-
-Required package dependencies are declared in \code{DESCRIPTION} and are
-installed with \pkg{genometranslator}. Any additional dependency needed only
-for this format or option is identified in this help page. Use
-\code{genometranslator_dependencies()} to inspect the availability of core
-packages, optional packages, and external executables.
+Blocked gVCF support, population-specific projection, and genotype-likelihood
+SFS estimation are not implemented. Block-aware import must preserve
+boundaries and quality summaries without inventing per-base information.
 }
 
 \examples{
 \dontrun{
-# without outgroup:
-dadi.data <- genometranslator::write_dadi(data = "my_tidy_dataset.rad")
-
-# with outgroup and fasta generated by stacks:
-dadi.data <- genometranslator::write_dadi(
-   data = "my_tidy_dataset.rad",
-   fasta.ingroup = "batch_1.ingroup.fa",
-   fasta.outgroup = "batch_1.outgroup.fa",
-   sumstats.ingroup = "batch_1.sumstats.ingroup.tsv",
-   sumstats.outgroup = "batch_1.sumstats.outgroup.tsv"
+result <- genometranslator::write_dadi(
+  "study.gds", strata = "samples.tsv", pop.levels = c("North", "South"),
+  filename = "study", path.folder = "exports"
 )
+result$parameters
 }
 }
 \references{
-Gutenkunst RN, Hernandez RD, Williamson SH, Bustamante CD (2009)
-Inferring the Joint Demographic History of Multiple Populations
-from Multidimensional SNP Frequency Data (G McVean, Ed,).
-PLoS genetics, 5, e1000695.
+dadi frequency-spectrum file specification:
+\url{https://dadi.readthedocs.io/en/latest/user-guide/importing-data/}
 }
 \author{
 Thierry Gosselin \email{thierrygosselin@icloud.com}

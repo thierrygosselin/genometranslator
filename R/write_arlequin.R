@@ -1,192 +1,125 @@
-# write an Arlequin file from a tidy data frame
-
-#' @name write_arlequin
-#' @title Write an Arlequin file
-#' @description Write a arlequin file from a tidy data frame.
-#' Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
-#' and \href{https://github.com/thierrygosselin/assigner}{assigner}
-#' and might be of interest for users.
-
-#' @param data A tidy data frame object in the global environment or
-#' a tidy data frame in wide or long format in the working directory.
-#' \emph{How to get a tidy data frame ?}
-#' Look into \pkg{genometranslator} \code{\link{tidy_genome}}.
-
-#' @param pop.levels (optional, string) A character string with your populations ordered.
-#' Default: \code{pop.levels = NULL}.
-
-#' @param filename (optional) The file name prefix for the arlequin file
-#' written to the working directory. With default: \code{filename = NULL},
-#' the filename generated follow this \code{radiator_arlequin_DATE@TIME.csv}.
-
-#' Default: \code{filename = NULL}.
-#' @param ... other parameters passed to the function.
-
-#' @return An arlequin file is saved to the working directory.
-
-#' @references Excoffier, L.G. Laval, and S. Schneider (2005)
+#' Write an Arlequin file
+#'
+#' @description Export active diploid GDS genotypes as an Arlequin project,
+#' with sample, population, and allele-code mapping tables.
+#' @param data A GDS filepath or open `SeqVarGDSClass` connection.
+#' @param pop.levels Complete population order; never a population filter.
+#' @param filename Output basename, optionally ending in `.arp`.
+#' @param strata Sample metadata data frame or TSV file. NULL uses GDS metadata.
+#' Must cover every active sample, with unique `INDIVIDUALS` identifiers.
+#' @param group.column Population column in sample metadata.
+#' @param path.folder Output directory.
+#' @param chunk.size Number of individuals read per block.
+#' @param overwrite Replace existing output files.
+#' @param verbose Display messages, wrapped to 80 columns.
+#' @details Writes diploid `STANDARD` data with unknown gametic phase.
+#' Individuals have frequency one and two allele rows. Missing alleles are `?`,
+#' matching the profile declaration. Each biallelic or multiallelic record is
+#' one locus, with REF coded 1 and successive ALTs coded 2, 3, etc. Original
+#' sequences are recorded in the allele map. Phase is not exported. Haploid,
+#' polyploid, and presence/absence data are not supported.
+#'
+#' Exports the intersection of active selections and metadata whitelists.
+#' Temporary selections are restored on success or error. Filepaths are opened
+#' read-only and closed; caller-owned connections remain open. Safe identifiers
+#' replace sample/population names in the project; mapping tables retain the
+#' original names. The Structure section puts all populations in one group,
+#' without inferring a biological hierarchy.
+#' @return Invisibly, a list of output paths, sample/population maps, and
+#' exported variant IDs. The input GDS is not modified.
+#' @references Excoffier, L., Laval, G., and Schneider, S. (2005).
 #' Arlequin ver. 3.0: An integrated software package for population genetics
-#' data analysis. Evolutionary Bioinformatics Online 1:47-50.
-
-#' @export
-#' @rdname write_arlequin
+#' data analysis. Evolutionary Bioinformatics Online, 1, 47-50.
+#'
+#' Official Arlequin format specification (sections 4 and 5):
+#' \url{https://cmpg.unibe.ch/software/arlequin3522/man/Arlequin35.pdf}
 #' @author Thierry Gosselin \email{thierrygosselin@@icloud.com}
-#' @template writer-filtering
-#' @template io-dependencies
-
-
+#' @export
+#' @examples
+#' \dontrun{
+#' export <- genometranslator::write_arlequin(
+#'   "study.gds", strata = "samples.tsv", filename = "study",
+#'   path.folder = "exports"
+#' )
+#' export$files
+#' }
 write_arlequin <- function(
-  data,
-  pop.levels = NULL,
-  filename = NULL,
-  ...
+    data, pop.levels = NULL, filename = NULL, strata = NULL,
+    group.column = "STRATA", path.folder = getwd(), chunk.size = 32L,
+    overwrite = FALSE, verbose = TRUE
 ) {
-
-  # Checking for missing and/or default arguments ******************************
-  cli::cli_progress_step("Reading data")
-  if (missing(data)) rlang::abort("Input file missing")
-
-  # Import data ---------------------------------------------------------------
-  data %<>% genometranslator::read_genome(data = .)
-
-  if (!rlang::has_name(data, "GT")) {
-    cli::cli_progress_step("Recoding genotypes...")
-    data <- gt_recoding(x = data, gt = TRUE, alt.dosage = FALSE, gt.vcf = FALSE, gt.vcf.nuc = FALSE)
-  }
-
-  cli::cli_progress_step("Preparing data")
-  data %<>% dplyr::select(STRATA, INDIVIDUALS, MARKERS, GT)
-
-
-  # pop.levels -----------------------------------------------------------------
-  if (!is.null(pop.levels)) {
-    data %<>%
-      dplyr::mutate(
-      STRATA = factor(STRATA, levels = pop.levels, ordered = TRUE),
-      STRATA = droplevels(STRATA)
-    ) %>%
-      dplyr::arrange(STRATA, INDIVIDUALS, MARKERS)
-  } else {
-    data %<>%
-      dplyr::mutate(STRATA = factor(STRATA)) %>%
-      dplyr::arrange(STRATA, INDIVIDUALS, MARKERS)
-  }
-
-  # Create a marker vector  ------------------------------------------------
-  markers <- dplyr::distinct(.data = data, MARKERS) %>%
-    dplyr::arrange(MARKERS) %>%
-    purrr::flatten_chr(.)
-  npop <- length(unique(data$STRATA))
-
-  # arlequin format ----------------------------------------------------------------
-  data %<>%
-    dplyr::mutate(
-      A1 = stringi::stri_sub(str = GT, from = 1, to = 3),
-      A2 = stringi::stri_sub(str = GT, from = 4, to = 6),
-      GT = NULL
-    ) %>%
-    tgbase::trans_long(x = ., cols = c("STRATA", "INDIVIDUALS", "MARKERS"), names_to = "ALLELES", values_to = "GT") %>%
-    dplyr::mutate(
-      GT = stringi::stri_replace_all_fixed(str = GT, pattern = "000", replacement = "-9", vectorize_all = FALSE)
-    ) %>%
-    tgbase::trans_wide(x = ., formula = "INDIVIDUALS + STRATA  + ALLELES ~ MARKERS", values_from = "GT") %>%
-    dplyr::arrange(STRATA, INDIVIDUALS) %>%
-    dplyr::select(-ALLELES)
-
-  # Write the file in arlequin format -----------------------------------------
-
-  # date & time
-  file.date <- format(Sys.time(), "%Y%m%d@%H%M")
-
-  # Filename
-  if (is.null(filename)) {
-    filename.temp <- generate_filename(extension = "arlequin")
-    filename.short <- filename.temp$filename.short
-    filename <- filename.temp$filename
-  } else {
-    filename <- stringi::stri_join(filename, "_arlequin.csv")
-    filename.problem <- file.exists(filename)
-    if (filename.problem) {
-      filename.temp <- generate_filename(extension = "arlequin")
-      filename.short <- filename.temp$filename.short
-      filename <- filename.temp$filename
+  force(data)
+  .export_count(chunk.size, "chunk.size", 1)
+  .export_flag(verbose, "verbose")
+  .export_flag(overwrite, "overwrite")
+  start <- tgbase::startup(package = "genometranslator",
+    f.name = "write_arlequin", verbose = verbose)
+  on.exit(tgbase::teardown(start), add = TRUE)
+  context <- .export_gds(data)
+  on.exit(.export_close(context), add = TRUE)
+  gds <- context$gds
+  metadata <- .export_groups(gds, strata, group.column, pop.levels)
+  ids <- SeqArray::seqGetData(gds, "variant.id")
+  chrom <- SeqArray::seqGetData(gds, "chromosome")
+  position <- SeqArray::seqGetData(gds, "position")
+  alleles <- strsplit(SeqArray::seqGetData(gds, "allele"), ",", fixed = TRUE)
+  sample.map <- metadata$samples
+  sample.map$EXPORT_ID <- paste0("S", seq_len(nrow(sample.map)))
+  paths <- .export_paths(filename, "arlequin", path.folder,
+    c(".arp", "_samples.tsv", "_populations.tsv", "_alleles.tsv"), overwrite)
+  stage <- tempfile("arlequin-export-")
+  dir.create(stage)
+  on.exit(unlink(stage, recursive = TRUE), add = TRUE)
+  staged <- file.path(stage, basename(paths))
+  con <- file(staged[[1]], "wt")
+  on.exit(if (!is.null(con)) close(con), add = TRUE)
+  writeLines(c("[Profile]", 'Title="genometranslator Arlequin export"',
+    paste0("NbSamples=", nrow(metadata$populations)), "GenotypicData=1",
+    "LocusSeparator=WHITESPACE", "GameticPhase=0", "MissingData='?'",
+    "DataType=STANDARD", "[Data]", "[[Samples]]"), con)
+  for (group in metadata$populations$GROUP) {
+    pop <- metadata$populations$EXPORT_ID[metadata$populations$GROUP == group]
+    samples <- sample.map[sample.map$GROUP == group, , drop = FALSE]
+    writeLines(c(paste0('SampleName="', pop, '"'),
+      paste0("SampleSize=", nrow(samples)), "SampleData={"), con)
+    blocks <- split(seq_len(nrow(samples)),
+      ceiling(seq_len(nrow(samples)) / chunk.size))
+    for (block in blocks) {
+      selected <- samples$INDIVIDUALS[block]
+      SeqArray::seqSetFilter(gds, sample.id = selected, variant.id = ids,
+        verbose = FALSE)
+      gt <- .export_genotypes(gds)
+      actual <- as.character(SeqArray::seqGetData(gds, "sample.id"))
+      for (j in seq_along(selected)) {
+        a <- gt[, match(selected[[j]], actual), , drop = FALSE]
+        dim(a) <- c(2L, length(ids))
+        for (copy in 1:2) {
+          value <- ifelse(is.na(a[copy, ]), "?", as.character(a[copy, ] + 1L))
+          prefix <- if (copy == 1L) {
+            paste(samples$EXPORT_ID[block[[j]]], "1")
+          } else ""
+          writeLines(paste(prefix, paste(value, collapse = " ")), con)
+        }
+      }
     }
-    filename.short <- filename
+    writeLines("}", con)
   }
-
-  cli::cli_progress_step("Writing arlequin")
-  filename.connection <- file(filename, "w") # open the connection to the file
-  # Profile section
-  write("[Profile]", file = filename.connection)
-  write(paste('Title = "radiator_arlequin_export', " ", file.date, '"'), file = filename.connection, append = TRUE)
-  write(paste("NbSamples = ", npop), file = filename.connection, append = TRUE) # number of pop
-  write(paste("GenotypicData = 1"), file = filename.connection, append = TRUE)
-  write(paste("LocusSeparator = WHITESPACE"), file = filename.connection, append = TRUE)
-  write(paste("GameticPhase = 0"), file = filename.connection, append = TRUE) # 0 = unknown gametic phase
-  write(paste("MissingData = '?'"), file = filename.connection, append = TRUE)
-  write(paste("DataType = STANDARD"), file = filename.connection, append = TRUE)
-  write(paste("[Data]"), file = filename.connection, append = TRUE)
-  write(paste("[[Samples]]"), file = filename.connection, append = TRUE)
-
-  # pop <- as.character(data$STRATA) # Create a population vector
-  # data.split <- split(data, pop) # split data by populations
-  # for (i in 1:length(data.split)) {
-  #   # i <- 1
-  #   # i <- 2
-  #   pop.data <- data.split[[i]]
-  #   pop.name <- unique(as.character(pop.data$STRATA))
-  #   n.ind <- dplyr::n_distinct(pop.data$INDIVIDUALS)
-  #   write(paste("SampleName = ", pop.name), file = filename.connection, append = TRUE)
-  #   write(paste("SampleSize = ", n.ind), file = filename.connection, append = TRUE)
-  #   write(paste("SampleData = {"), file = filename.connection, append = TRUE)
-  #   pop.data$INDIVIDUALS[seq(from = 2, to = n.ind * 2, by = 2)] <- ""
-  #   pop.data <- dplyr::select(.data = pop.data, -STRATA)
-  #   ncol.data <- ncol(pop.data)
-  #   pop.data <- as.matrix(pop.data)
-  #   write(x = t(pop.data), ncolumns = ncol.data, sep = "\t", append = TRUE, file = filename.connection)
-  #   write("}", file = filename.connection, append = TRUE)
-  # }
-
-  write_arl <- function(x, filename.connection) {
-    n.ind <- dplyr::n_distinct(x$INDIVIDUALS)
-    write(paste("SampleName = ", unique(as.character(x$STRATA))), file = filename.connection, append = TRUE)
-    write(paste("SampleSize = ", n.ind), file = filename.connection, append = TRUE)
-    write(paste("SampleData = {"), file = filename.connection, append = TRUE)
-    x$INDIVIDUALS[seq(from = 2, to = n.ind * 2, by = 2)] <- ""
-    x %<>% dplyr::select(-STRATA)
-    ncol.data <- ncol(x)
-    x <- as.matrix(x)
-    write(x = t(x), ncolumns = ncol.data, sep = "\t", append = TRUE, file = filename.connection)
-    write("}", file = filename.connection, append = TRUE)
-  }
-
-  data.split <- dplyr::group_split(.tbl = data, STRATA, .keep = TRUE)
-  purrr::walk(
-    .x = data.split,
-    .f = write_arl,
-    filename.connection = filename.connection
-  )
-
-
-  write(paste("[[Structure]]"), file = filename.connection, append = TRUE)
-  write(paste("StructureName = ", "\"", "One cluster", "\""), file = filename.connection, append = TRUE)
-  write(paste("NbGroups = 1"), file = filename.connection, append = TRUE)
-  write(paste("Group = {"), file = filename.connection, append = TRUE)
-
-  write_arl_end <- function(x, filename.connection) {
-    write(paste("\"", unique(x$STRATA), "\"", sep = ""), file = filename.connection, append = TRUE)
-  }
-  purrr::walk(
-    .x = data.split,
-    .f = write_arl_end,
-    filename.connection = filename.connection
-  )
-  # for (i in 1:length(data.split)) {
-  #   pop.data <- data.split[[i]]
-  #   pop.name <- unique(pop.data$STRATA)
-  #   write(paste("\"", pop.name, "\"", sep = ""), file = filename.connection, append = TRUE)
-  # }
-  write(paste("}"), file = filename.connection, append = TRUE)
-  cli::cli_progress_step(stringi::stri_join("Arlequin file: ", filename.short))
-  invisible(data)
-} # end write_arlequin
+  writeLines(c("[[Structure]]", 'StructureName="One group"', "NbGroups=1",
+    "Group={", paste0('"', metadata$populations$EXPORT_ID, '"'), "}"), con)
+  close(con)
+  con <- NULL
+  allele.map <- dplyr::bind_rows(lapply(seq_along(ids), function(i) {
+    tibble::tibble(LOCUS_INDEX = i, VARIANT_ID = ids[[i]],
+      CHROM = chrom[[i]], POS = position[[i]],
+      ALLELE_CODE = seq_along(alleles[[i]]), ALLELE = alleles[[i]])
+  }))
+  readr::write_tsv(sample.map, staged[[2]])
+  readr::write_tsv(metadata$populations, staged[[3]])
+  readr::write_tsv(allele.map, staged[[4]])
+  .export_publish(staged, paths, overwrite)
+  if (verbose) .export_message("Arlequin export: ", nrow(sample.map),
+    " samples, ", length(ids), " loci in ", nrow(metadata$populations),
+    " populations.\nFile: ", paths[[1]])
+  invisible(list(files = paths, samples = sample.map,
+    populations = metadata$populations, variant.id = ids))
+}

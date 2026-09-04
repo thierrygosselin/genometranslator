@@ -11,6 +11,7 @@ read_vcf(
   vcf.stats = FALSE,
   parallel.core = parallel::detectCores() - 1,
   verbose = TRUE,
+  all.sites = NULL,
   ...
 )
 }
@@ -44,6 +45,17 @@ Default: \code{parallel.core = parallel::detectCores() - 1}.}
 \item{verbose}{(logical, optional)
 When \code{TRUE}, the function prints progress messages and a summary.
 Default: \code{verbose = TRUE}.}
+
+\item{all.sites}{NULL (default) detects invariant records automatically.
+TRUE declares a site-level variant-and-invariant VCF; FALSE rejects
+invariant records. This does not assert that every genomic base is callable.
+Invariant records and missing genotypes are retained. The GDS stores
+\code{vcf.site.content} metadata and a \code{SITE_TYPE} marker column. Counts describe
+imported records, before optional filtering. ALT-bearing records can still
+be monomorphic after sample selection. Existing caller provenance is unchanged.
+gVCF reference blocks must be converted to site-level VCF first.
+All-sites input requires \code{filter.haplotype.format = FALSE}. For SFS work,
+do not subsequently remove invariant sites or filter by MAF/MAC.}
 }
 \value{
 A \code{SeqVarGDSClass} object (GDS) with a \code{/metadata} node
@@ -82,6 +94,16 @@ VCF import uses the declared Bioconductor packages \pkg{SeqArray},
 require the optional \command{bcftools} executable. See the installation
 section of the package README and check visibility with
 \code{Sys.which("bcftools")}.
+}
+
+\section{Future work}{
+
+TODO: add explicit support for blocked gVCF. This is not currently supported
+by this interface. Planned work includes caller-specific block handling,
+preservation of block boundaries and depth/quality summaries, and
+block-aware counting of eligible invariant bases for SFS export.
+Missing or uncovered positions must not be treated as reference calls.
+Expanding blocks cannot restore original per-base quality measurements.
 }
 
 \section{Provenance and structural variants}{

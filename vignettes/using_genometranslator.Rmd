@@ -247,6 +247,30 @@ The function returns an open SeqArray GDS object. The GDS representation avoids
 materializing a very large genotype table in memory and is the preferred format
 for subsequent work in R.
 
+### Import variant and invariant sites
+
+Use `read_vcf("populations.all.vcf", all.sites = TRUE)` for a site-level
+all-sites VCF. The default `all.sites = NULL` detects invariant records;
+`FALSE` rejects them. Import preserves missing genotypes rather than treating
+them as reference calls. The GDS retains existing caller/version provenance,
+adds `vcf.site.content` with import-time record counts, and adds `SITE_TYPE`
+to marker metadata. An ALT-bearing record can still be monomorphic among
+selected individuals, so this classification is not an allele-frequency test.
+
+STACKS `--vcf-all`, FreeBayes `--report-monomorphic`, and bcftools `call -m`
+without `-v` can supply such records. In scaffoldr, set `all.sites = TRUE`
+in `run_freebayes()` or `run_bcftools_mpileup()`. This requests site-level
+output, not gVCF reference blocks. Caller thresholds and missingness still
+limit what is observed; an all-sites tag does not guarantee genome-wide
+callability. STACKS invariant records may contain GT only, without DP or GQ.
+
+Keep an SFS-specific dataset: sample and locus quality checks remain useful,
+but removing invariant records or applying MAF/MAC thresholds changes the SFS.
+Both `write_fastsimcoal()` and `write_dadi()` count eligible invariant records
+directly from the GDS. They require complete calls across selected samples;
+the all-sites tag alone does not certify callability. Blocked gVCF remains
+future work.
+
 ### Preserve how variants were generated
 
 `read_vcf()` stores a provenance table in the GDS metadata. It records the
@@ -454,6 +478,125 @@ write_genome(
 
 The name `shark_filtered.vcf` should only be used if `genome` was filtered
 before the call: the writer itself does not perform that filtering.
+
+### Export VCF or BCF
+
+The filename selects the encoding; no separate BCF writer is needed:
+
+```{r vcf-bcf-export, eval=FALSE}
+write_vcf(genome, filename = "study.vcf")
+write_vcf(genome, filename = "study.vcf.gz")
+write_vcf(genome, filename = "study.bcf")
+```
+
+Compressed VCF and BCF require bcftools, are coordinate-sorted, and receive
+a CSI index by default (`index = FALSE` disables indexing). Plain VCF keeps
+the GDS record order. Existing output requires `overwrite = TRUE`.
+GDS selections and metadata whitelists are respected and restored, and
+available genotype fields (including missing calls, depth and likelihoods)
+are retained. Missing annotations cannot be recovered by changing encoding.
+Original site-level INFO summaries are not recalculated when samples change;
+recalculate cohort-dependent AF/AC/AN/NS/DP before interpreting them.
+BCF is binary VCF, not blocked gVCF. Legacy tidy input remains supported,
+but only through its existing limited genotype-table translation.
+
+### Export an Arlequin project
+
+`write_arlequin()` reads active diploid genotypes directly from GDS and writes
+an `.arp` project. It supports biallelic and multiallelic records, writes missing
+alleles as `?`, and assigns frequency one to each individual. Each VCF record
+becomes one unphased `STANDARD` locus. Original sample/population names and
+allele definitions remain available in companion mapping tables.
+
+```{r arlequin-export, eval=FALSE}
+arp <- write_arlequin(
+  genome, filename = "study", path.folder = "exports",
+  strata = strata, pop.levels = c("North", "South")
+)
+arp$files
+```
+
+Population order must list every exported population; it never silently
+removes samples. The writer respects active selections and metadata
+whitelists, restores temporary selections even on errors, and leaves the
+caller's GDS connection open. The project places populations in one structural
+group; this is not an inferred hierarchy. See Excoffier, Laval, and Schneider
+(2005), *Arlequin ver. 3.0: An integrated software package for population
+genetics data analysis*, **Evolutionary Bioinformatics Online**, 1, 47-50,
+and the [official format specification](https://cmpg.unibe.ch/software/arlequin3522/man/Arlequin35.pdf).
+
+### Export a site-frequency spectrum for fastsimcoal
+
+`write_fastsimcoal()` builds a joint spectrum from active diploid biallelic
+SNPs. The default folded spectrum does not require ancestral states. Population
+order must match the demographic model; the population table records zero-based
+indices and chromosome sample sizes. The last population varies fastest in the
+flattened file, following the
+[fastsimcoal specification](https://cmpg.unibe.ch/software/fastsimcoal2/man/fastsimcoal28.pdf).
+
+```{r fastsimcoal-export, eval=FALSE}
+sfs <- write_fastsimcoal(
+  genome, strata = strata, pop.levels = c("North", "South"),
+  filename = "study", path.folder = "exports", folded = TRUE
+)
+sfs$populations
+table(sfs$audit$STATUS)
+```
+
+Use the resulting `_MSFS.obs` file with `--multiSFS` and `-m`; an unfolded
+`_DSFS.obs` uses `--multiSFS` and `-d`. For unfolded output, supply a validated
+`VARIANT_ID`/`ANCESTRAL` table. REF is not automatically ancestral.
+
+Important limits and decisions:
+
+- Only records with complete calls in every selected sample contribute.
+  Incomplete, non-biallelic/non-SNP, and unknown-ancestry exclusions are audited.
+  This initial exporter does not perform projection or genotype-likelihood SFS
+  estimation. Nonrandom missingness can bias complete-case spectra.
+- Folding identifies the minor allele globally across the selected populations.
+  Pooled ties contribute half to each complementary cell.
+- `invariant.sites` adds only independently validated, callable invariant sites
+  **absent from the GDS**. Never count filtered SNPs, already represented sites,
+  or uncallable sequence as additional invariant sites.
+- Invariant records already in an all-sites GDS are counted automatically.
+  For unfolded spectra, they also need ancestral bases. A REF base different
+  from the supplied ancestral base contributes to the fixed-derived bin.
+  The audit records both input site type and observed invariance after sample
+  selection. Duplicate mapped positions are excluded to avoid double counting.
+- A SNP-only file is not a complete sequence SFS. Account for variant discovery,
+  MAC/MAF filters, RAD locus ascertainment, linkage, and callable sequence before
+  demographic inference. Absolute scaling needs an appropriate denominator;
+  no chromosome-length shortcut is used here.
+- Joint spectra grow rapidly with sample size and number of populations. The
+  `max.cells` limit prevents unexpectedly large allocations.
+
+### Export a native dadi spectrum
+
+`write_dadi()` now accepts GDS only and writes dadi's native `.fs` format,
+not the former tidy-data SNP table. It shares the fastsimcoal SFS engine,
+including invariant accounting, ancestry checks and complete-case exclusions.
+
+```{r dadi-export, eval=FALSE}
+dadi_sfs <- write_dadi(
+  genome, strata = strata, pop.levels = c("North", "South"),
+  filename = "study", path.folder = "exports", folded = TRUE
+)
+dadi_sfs$parameters
+```
+
+Read the result in Python with `dadi.Spectrum.from_file("exports/study.fs")`.
+Population IDs P1, P2, etc. map to original names in the population sidecar.
+The all-ancestral and all-derived corners are masked by default: counts are
+preserved but excluded from ordinary dadi inference. Folded spectra also
+mask cells above half the pooled chromosome count. For a model explicitly
+using monomorphic bins, both export and import mask settings must be chosen
+accordingly (`mask.corners = FALSE` in R; `mask_corners=False` in Python).
+See the [dadi format specification](https://dadi.readthedocs.io/en/latest/user-guide/importing-data/).
+
+Neither exporter imputes missing calls, projects sample sizes, or interprets
+blocked gVCF. These remain explicit future work. With many individuals,
+complete-case filtering can be severe: inspect the audit rather than assuming
+the resulting SFS represents all sequenced loci.
 
 ### Upgrade legacy `.gds.rad` files
 
