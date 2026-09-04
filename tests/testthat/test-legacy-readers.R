@@ -78,6 +78,7 @@ testthat::test_that("read_genind modern return paths work", {
 testthat::test_that("read_genlight generates explicit de novo metadata", {
   testthat::skip_if_not_installed("adegenet")
   x <- adegenet::as.genlight(matrix(c(0, 1, 2, NA), nrow = 2L))
+  adegenet::ploidy(x) <- 2L
   adegenet::indNames(x) <- c("sample-1", "sample-2")
   adegenet::pop(x) <- factor(c("one", "two"))
 

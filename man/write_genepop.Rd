@@ -10,76 +10,76 @@ write_genepop(
   genepop.header = NULL,
   markers.line = TRUE,
   filename = NULL,
-  ...
+  strata = NULL,
+  group.column = "STRATA",
+  path.folder = getwd(),
+  chunk.size = 32L,
+  overwrite = FALSE,
+  verbose = TRUE
 )
 }
 \arguments{
-\item{data}{A supported genomic file, object, or tidy genomic data frame.
-Default: \code{data = NULL}.}
+\item{data}{Open GDS, GDS filepath, or long data frame containing STRATA,
+INDIVIDUALS, MARKERS and GT (four- or six-digit diploid codes).}
 
-\item{pop.levels}{(optional, string) A character string with your populations ordered.
-Default: \code{pop.levels = NULL}. Described in \code{\link{read_strata}}.}
+\item{pop.levels}{Complete population order, not a population filter.}
 
-\item{genepop.header}{The first line of the Genepop file.
-With the default, Will use "radiator genepop with date".
-Default: \code{genepop.header = NULL}.}
+\item{genepop.header}{Optional single-line ASCII title.}
 
-\item{markers.line}{(optional, logical) In the genepop and structure
-file, you can write the markers on a single line separated by
-commas \code{markers.line = TRUE},
-or have markers on a separate line, i.e. in one column, for the genepop file
-(not very useful with thousands of markers) and not printed at all for the
-structure file.
-Default: \code{markers.line = TRUE}.}
+\item{markers.line}{TRUE writes comma-separated loci on one line; FALSE
+writes one locus per line.}
 
-\item{filename}{(optional) The file name prefix for the genepop file
-written to the working directory. With default: \code{filename = NULL},
-the date and time is appended to \code{radiator_genepop_}.
-Default: \code{filename = NULL}.}
+\item{filename}{Basename, optionally ending in .gen.}
 
-\item{...}{other parameters passed to the function.}
+\item{strata}{Optional sample metadata for GDS input; NULL uses GDS metadata.}
+
+\item{group.column}{Population column for GDS metadata.}
+
+\item{path.folder}{Output directory.}
+
+\item{chunk.size}{Number of GDS individuals read per block.}
+
+\item{overwrite}{Replace existing outputs.}
+
+\item{verbose}{Display messages wrapped to 80 columns.}
 }
 \value{
-A genepop file is saved to the working directory.
+Invisibly, a list with files, sample/population/locus mappings.
 }
 \description{
-Write a genepop file from a tidy data frame or GDS file/object.
-Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
-and \href{https://github.com/thierrygosselin/assigner}{assigner}
-and might be of interest for users.
+Export diploid GDS calls in blocks, or validated long tidy
+genotype data, with explicit population order and reversible ID mappings.
 }
-\section{Data filtering}{
+\details{
+GDS selections and metadata whitelists are respected and restored.
+Missing alleles are 000, including partially missing genotypes. Each GDS
+allele receives a locus-specific code: REF=001, first ALT=002, etc., up to
+999 alleles. These codes are labels, not nucleotide identities or repeat
+lengths. An allele mapping table retains original strings. Phase, coverage,
+likelihoods and coordinates are not carried by Genepop; coordinate metadata
+are supplied separately in the locus map. Invariant records are retained.
+Haploid/polyploid and SilicoDArT presence/absence data are not supported.
 
-This writer does not silently filter markers or individuals. It may validate
-requirements imposed by the destination format and stop with an informative
-error when the input is unsuitable. It is the user's responsibility to
-filter and quality-control the data appropriately for the intended analysis
-before generating the output. Use
-\href{https://thierrygosselin.github.io/radr/}{\pkg{radr}} or another
-suitable workflow when filtering is required.
+Export identifiers are S1, S2, etc. for samples and L1, L2, etc. for loci,
+avoiding delimiters and reserved words. Sidecars preserve original names.
+Population blocks follow pop.levels or first appearance. Tidy input must
+contain exactly one call per sample/locus and consistent sample populations.
+No global R options are changed. Caller-owned GDS connections remain open.
 }
-
-\section{Dependencies}{
-
-Required package dependencies are declared in \code{DESCRIPTION} and are
-installed with \pkg{genometranslator}. Any additional dependency needed only
-for this format or option is identified in this help page. Use
-\code{genometranslator_dependencies()} to inspect the availability of core
-packages, optional packages, and external executables.
+\examples{
+\dontrun{
+write_genepop("study.gds", strata = "samples.tsv", filename = "study",
+  path.folder = "exports", pop.levels = c("North", "South"))
 }
-
+}
 \references{
-Raymond M. & Rousset F, (1995).
-GENEPOP (version 1.2): population genetics software for exact tests
-and ecumenicism.
-J. Heredity, 86:248-249
-
-Rousset F.
-genepop'007: a complete re-implementation of the genepop software
-for Windows and Linux.
-Molecular Ecology Resources.
-2008, 8: 103-106.
-doi:10.1111/j.1471-8286.2007.01931.x
+Raymond M. and Rousset F. (1995). GENEPOP (version 1.2):
+population genetics software for exact tests and ecumenicism.
+Journal of Heredity 86:248-249.
+Rousset F. (2008). genepop'007: a complete re-implementation of the genepop
+software for Windows and Linux. Molecular Ecology Resources 8:103-106.
+\doi{10.1111/j.1471-8286.2007.01931.x}
+\url{https://f-rousset.r-universe.dev/genepop/doc/the-input-file.html}
 }
 \author{
 Thierry Gosselin \email{thierrygosselin@icloud.com}

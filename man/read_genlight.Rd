@@ -10,7 +10,7 @@ read_genlight(
   gds = TRUE,
   write = FALSE,
   verbose = FALSE,
-  parallel.core = parallel::detectCores() - 1
+  parallel.core = 1L
 )
 }
 \arguments{
@@ -23,19 +23,20 @@ Default: \code{tidy = TRUE}.}
 \item{gds}{Logical. Generate a genometranslator GDS representation.
 Default: \code{gds = TRUE}.}
 
-\item{write}{Logical. Write the tidy table as an Arrow/Parquet file.
+\item{write}{Logical. Save the tidy table as a uniquely named RDS file.
 Default: \code{write = FALSE}.}
 
 \item{verbose}{Logical indicating whether progress messages are emitted.
 Default: \code{verbose = FALSE}.}
 
-\item{parallel.core}{Number of workers available for parallel operations.
-Default: \code{parallel.core = parallel::detectCores() - 1}.}
+\item{parallel.core}{Positive integer retained for reader-call compatibility;
+this conversion is serial.}
 }
 \value{
 With \code{tidy = TRUE}, a tidy tibble. With
 \code{tidy = FALSE, gds = TRUE}, the generated GDS result. With both options
 false, the original \code{genlight} object.
+tidy=TRUE takes precedence without creating a GDS as a side effect.
 }
 \description{
 Import an \pkg{adegenet} \code{genlight} object, standardize its
@@ -49,7 +50,7 @@ Missing marker fields are generated when necessary:
 in the tidy dataset.
 \item \code{is.null(data@chromosome)}: \code{DENOVO} is used
 in the tidy dataset.
-\item \code{is.null(data@loc.names)}: LOCUS1 to \code{ncol(genlight)}
+\item \code{is.null(data@loc.names)}: L1 to \code{ncol(genlight)}
 will be integrated in the tidy dataset.
 \item \code{is.null(data@position)}: an integer string of
 length = \code{ncol(genlight)} will be integrated in the tidy dataset.

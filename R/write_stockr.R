@@ -1,92 +1,34 @@
-# write a stockR data set
-#' @name write_stockr
-#' @title Write a stockR dataset
-
-#' @description Write a stockR dataset (Fost et al. submitted).
-#' Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
-#' and might be of interest for users.
-
-#' @inheritParams genometranslator_common_arguments
-#' @param filename (optional) The stockr object is written in the working
-#' directory. The file is written with \code{radiator_stockr_DATE@TIME.RData} and
-#' can be open with readRDS.
-#' Default: \code{filename = NULL}.
-
-#' @export
-#' @rdname write_stockr
-#' @references Foster et al. submitted
-
-#' @return The object generated is a matrix with
-#' dimension: MARKERS x INDIVIDUALS. The genotypes are coded like PLINK:
-#' 0, 1 or 2 alternate allele. 0: homozygote for the reference allele,
-#' 1: heterozygote, 2: homozygote for the alternate allele.
-#' Missing genotypes have NA. The object also as 2 attributes.
-#' \code{attributes(data)$grps} with \code{STRATA/POP_ID} of the individuals and
-#' \code{attributes(data)$sample.grps} filled with \code{INDIVIDUALS}.
-#' Both attributes can be used inside \emph{stockR}.
-
+#' Write stockR
+#'
+#' @description Returns a loci-by-individuals ALT dosage matrix (0/1/2, NA missing), with grps and sample.grps attributes. Optional file output uses RDS.
+#' @param data Open SeqArray GDS or GDS path. Active whitelists are respected.
+#' @param filename Optional output basename; use path.folder for the directory.
+#' @param verbose Display progress messages.
+#' @param strata Metadata table or TSV with INDIVIDUALS and STRATA.
+#' @param path.folder Output directory.
+#' @param chunk.size Number of samples per GDS read block.
+#' @param overwrite Allow replacement of existing output files.
+#' @details GDS selections are restored, including on errors. Partial diploid
+#' calls are rejected by allele-based conversions. No implicit biological
+#' filtering or imputation is performed. Safe locus/sample IDs have mapping
+#' tables. In-memory matrices must fit in RAM; block reads limit temporary memory.
+#' @return Export paths and mappings, or the target object as described above.
+#' @references Foster SD, Feutry P, Grewe PM, Berry O, Hui FKC, Davies CR.
+#' Reliably discriminating stock structure with genetic markers: Mixture models
+#' with robust and fast computation. \doi{10.1111/1755-0998.12920}.
+#' @examples
+#' \dontrun{
+#' write_stockr("study.gds", filename = "study")
+#' }
 #' @author Thierry Gosselin \email{thierrygosselin@@icloud.com}
-#' @template writer-filtering
-#' @template io-dependencies
-
-write_stockr <- function(data, filename = NULL, verbose = TRUE) {
-  # Checking for missing and/or default arguments ------------------------------
-  if (missing(data)) rlang::abort("Input file missing")
-
-  # File type detection----------------------------------------------------------
-  data.type <- genometranslator::detect_genomic_format(data)
-
-  if (data.type %in% c("SeqVarGDSClass", "gds.file")) {
-    if (data.type == "gds.file") {
-      data <- genometranslator::read_genome(data, verbose = verbose)
-    }
-    data <- tidy_genome(data = data, parallel.core = parallel::detectCores() - 1)
-    data.type <- "tbl_df"
-  } else {
-    if (is.vector(data)) {
-      data <- genometranslator::read_genome(data = data, import.metadata = TRUE)
-    }
-  }
-
-  # if (!rlang::has_name(data, "POP_ID") && rlang::has_name(data, "STRATA")) {
-  #   data %<>% dplyr::rename(POP_ID = STRATA)
-  # }
-
-  if (!rlang::has_name(data, "ALT_DOSAGE")) {
-    data <- gt_recoding(x = data, gt = FALSE, alt.dosage = TRUE, gt.vcf = FALSE, gt.vcf.nuc = FALSE)
-  }
-
-
-  data <- dplyr::select(data, MARKERS, STRATA, INDIVIDUALS, ALT_DOSAGE) %>%
-    dplyr::arrange(MARKERS, STRATA, INDIVIDUALS)
-  strata <- dplyr::distinct(data, INDIVIDUALS, STRATA)
-
-  data <- suppressWarnings(
-    dplyr::select(data, MARKERS, INDIVIDUALS, ALT_DOSAGE) %>%
-      data.table::as.data.table(.) %>%
-      data.table::dcast.data.table(
-        data = .,
-        formula = MARKERS ~ INDIVIDUALS,
-        value.var = "ALT_DOSAGE"
-      ) %>%
-      tibble::as_tibble(.) %>%
-      dplyr::select(MARKERS, strata$INDIVIDUALS) %>%
-      tibble::remove_rownames(.data = .) %>%
-      tibble::column_to_rownames(.data = ., var = "MARKERS")) %>%
-    as.matrix(.)
-
-  attr(data,"grps") <- strata$STRATA
-  attr(data,"sample.grps") <- factor(strata$INDIVIDUALS)
-
-
-  if (is.null(filename)) {
-    filename.temp <- generate_filename(extension = "stockr")
-  } else {
-    filename.temp <- generate_filename(name.shortcut = filename, extension = "stockr")
-  }
-  filename.short <- filename.temp$filename.short
-  filename <- filename.temp$filename
-  saveRDS(object = data, file = filename)
-  if (verbose) message("File written: ", filename.short)
-  return(data)
-} # end write_stockr
+#' @export
+write_stockr <- function(data, filename = NULL, verbose = TRUE,
+  strata = NULL, path.folder = getwd(), chunk.size = 32L, overwrite = FALSE) {
+  start <- .legacy_start("write_stockr", verbose)
+  on.exit(tgbase::teardown(start), add = TRUE)
+  x <- .legacy_snapshot(data, strata, TRUE, TRUE, chunk.size)
+  d <- t(.legacy_dosage(x))
+  attr(d, "grps") <- x$samples$GROUP
+  attr(d, "sample.grps") <- factor(x$samples$INDIVIDUALS)
+  .legacy_object(d, x, filename, path.folder, "_stockr.rds", overwrite)
+}

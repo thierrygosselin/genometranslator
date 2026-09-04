@@ -1,161 +1,51 @@
-# write a LDna object from a tidy data frame
-
-#' @name write_ldna
-#' @title Write an LDna object
-#' @section Dependencies:
-#' Required package dependencies are declared in DESCRIPTION and installed
-#' with genometranslator. Run `genometranslator_dependencies()` to inspect
-#' core packages, optional packages, and external executables.
+#' Write LDna
 #'
-#' This writer uses the optional Bioconductor package
-#' \href{https://bioconductor.org/packages/SNPRelate}{\pkg{SNPRelate}} to
-#' calculate the LD matrix. It writes data for LDna; it does not install or run
-#' the separate LDna software.
-#' @description Write a \href{https://github.com/petrikemppainen/LDna}{LDna}
-#' object from a biallelic tidy data frame.
-#' Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
-#' and might be of interest for users.
-
-#' @param data A tidy data frame object in the global environment or
-#' a tidy data frame in wide or long format in the working directory.
-#' \emph{How to get a tidy data frame ?}
-#' Look into \pkg{genometranslator} \code{\link{tidy_genome}}.
-#' \strong{The genotypes are biallelic.}
-
-
-#' @param filename (optional) The file name of the LDna lower matrix file.
-#' Radiator will append \code{.ldna.rds} to the filename.
-#' If filename chosen is already present in the
-#' working directory, the default \code{radiator_datetime.ldna.rds} is chosen.
-#' With default, \code{filename = NULL}, no file is generated, only an object in
-#' the Global Environment.
-#' To read the data back into R, use readRDS("filename.ldna.rds").
-
-#' Default: \code{filename = NULL}.
-#' @inheritParams tidy_genome
-
-#' @param ... (optional) To pass further argument for fine-tuning the
-#' function (see details).
-
-#' @export
-#' @rdname write_ldna
+#' @description Computes SNPRelate gametic r-squared and returns the lower triangle (NA diagonal and upper triangle). Memory is quadratic in marker count. max.markers prevents unexpectedly large allocation. Requires SNPRelate.
+#' @param data Open SeqArray GDS or GDS path. Active whitelists are respected.
+#' @param filename Optional output basename; use path.folder for the directory.
+#' @param parallel.core Number of LD calculation threads.
+#' @param path.folder Output directory.
+#' @param overwrite Allow replacement of existing output files.
+#' @param verbose Display progress messages.
+#' @param max.markers Maximum number of loci allowed in the dense LD matrix.
+#' @details GDS selections are restored, including on errors. Partial diploid
+#' calls are rejected by allele-based conversions. No implicit biological
+#' filtering or imputation is performed. Safe locus/sample IDs have mapping
+#' tables. In-memory matrices must fit in RAM; block reads limit temporary memory.
+#' @return Export paths and mappings, or the target object as described above.
 #' @references Kemppainen P, Knight CG, Sarma DK et al. (2015)
 #' Linkage disequilibrium network analysis (LDna) gives a global view of
 #' chromosomal inversions, local adaptation and geographic structure.
 #' Molecular Ecology Resources, 15, 1031-1045.
-
-#' @references Zheng X, Levine D, Shen J, Gogarten SM, Laurie C, Weir BS.
-#' (2012) A high-performance computing toolset for relatedness and principal component
-#' analysis of SNP data. Bioinformatics. 28: 3326-3328.
-#' doi:10.1093/bioinformatics/bts606
-
-#' @details The function requires \href{https://github.com/zhengxwen/SNPRelate}{SNPRelate}
-#' to prepare the data for LDna.
-#'
-#' To install SNPRelate:
-#' install.packages("BiocManager")
-#' BiocManager::install("SNPRelate")
-#'
-#' To install LDna:
-#' devtools::install_github("petrikemppainen/LDna")
-#'
-
+#' @examples
+#' \dontrun{
+#' write_ldna("study.gds", filename = "study")
+#' }
 #' @author Thierry Gosselin \email{thierrygosselin@@icloud.com}
-#' @template writer-filtering
-
-
-write_ldna <- function(data,
-                       filename = NULL,
-                       parallel.core = parallel::detectCores() - 1,
-                       ...
-) {
-
-
-  # testing
-  # data <- unfiltered.data
-  # filename = NULL
-  # parallel.core = parallel::detectCores() - 1
-
-  # Check that snprelate is installed
-  tgbase::check_package(package = "SNPRelate", cran = FALSE, bioc = TRUE)
-
-  # dotslist -------------------------------------------------------------------
-  radiator.dots <- list(...)
-
-
-  # Checking for missing and/or default arguments ------------------------------
-  if (missing(data)) rlang::abort("Input file missing")
-
-  # Filename -------------------------------------------------------------------
-  file.date <- format(Sys.time(), "%Y%m%d@%H%M")
-  if (is.null(filename)) {
-    write.ldna <- FALSE
-    filename <- stringi::stri_join("radiator_", file.date, ".ldna")
-  } else {
-    write.ldna <- TRUE
-    filename.problem <- file.exists(filename)
-    if (filename.problem) {
-      filename <- stringi::stri_join(filename, "_", file.date, ".ldna")
-    } else {
-      filename <- stringi::stri_join(filename, ".ldna")
-    }
-  }
-
-  # Import data ---------------------------------------------------------------
-  if (is.vector(data)) {
-    data <- genometranslator::read_genome(data = data, import.metadata = TRUE)
-  }
-
-  markers <- unique(data$MARKERS)
-
-  # Check if data is biallelic -------------------------------------------------
-  biallelic <- detect_biallelic_markers(data = data)
-  if (!biallelic) rlang::abort("LDna requires biallelic genotypes")
-
-  # Generating SNPRelate data --------------------------------------------------
-  message("Generating SNPRelate data")
-  data <- genometranslator::write_snprelate(
-    data = data,
-    biallelic = TRUE,
-    filename = filename,
-    verbose = FALSE)
-  message("SNPRelate GDS file generated: ", filename, ".gds")
-  message("To close the connection use SNPRelate::snpgdsClose(filename)")
-
-
-  # Compute LD -----------------------------------------------------------------
-  message("Computing LD matrix...")
-  LD <- NULL
-  long.distance.ld <- SNPRelate::snpgdsLDMat(
-    gdsobj = data,
-    snp.id = NULL,
-    sample.id = NULL,
-    slide = -1,
-    mat.trim = FALSE,
-    method = "r", #composite and corr option are the same with 0, 1, 2 gt coding
-    num.thread = parallel.core,
-    verbose = TRUE) %$%
-    LD
-
-  # anyNA(long.distance.ld)
-  # long.distance.ld.bk <- long.distance.ld
-  # long.distance.ld <- long.distance.ld.bk
-
-  # fill diagonal and upper matrix with NA
-  message("Preparing the data for LDna")
-  long.distance.ld[upper.tri(long.distance.ld, diag = TRUE)] <- rlang::na_dbl
-  # long.distance.ld[is.nan(long.distance.ld)] <- NA # removes NaN
-  long.distance.ld <- long.distance.ld^2 # R-square required by LDna
-
-  # dim(long.distance.ld)
-  colnames(long.distance.ld) <- rownames(long.distance.ld) <- markers
-  markers <- NULL
-
-  # write object ----------------------------------------------------------------
-  if (write.ldna) {
-    filename <- stringi::stri_join(filename, ".rds")
-    message("Writing LDna file: ", filename)
-    saveRDS(object = long.distance.ld, file = filename)
-  }
-  return(long.distance.ld)
-} # End write_ldna
+#' @export
+write_ldna <- function(data, filename = NULL, parallel.core = 1L,
+  path.folder = getwd(), overwrite = FALSE, verbose = TRUE,
+  max.markers = 10000L) {
+  start <- .legacy_start("write_ldna", verbose)
+  on.exit(tgbase::teardown(start), add = TRUE)
+  .export_count(parallel.core, "parallel.core", 1)
+  .export_count(max.markers, "max.markers", 2)
+  context <- .export_gds(data); on.exit(.export_close(context), add = TRUE)
+  info <- .gsi_loci(context$gds)
+  if (nrow(info$loci) > max.markers)
+    stop("LD matrix exceeds max.markers; select fewer loci to limit memory.")
+  folder <- tempfile(); dir.create(folder)
+  on.exit(unlink(folder, recursive = TRUE), add = TRUE)
+  g <- genometranslator::write_snprelate(context$gds, filename = "ld",
+    path.folder = folder, verbose = FALSE)
+  on.exit(SNPRelate::snpgdsClose(g), add = TRUE, after = FALSE)
+  result <- SNPRelate::snpgdsLDMat(g, slide = -1, mat.trim = FALSE,
+    method = "r", num.thread = parallel.core, verbose = verbose)
+  d <- result$LD^2
+  d[upper.tri(d, diag = TRUE)] <- NA_real_
+  dimnames(d) <- list(info$loci$EXPORT_ID, info$loci$EXPORT_ID)
+  x <- list(samples = tibble::tibble(INDIVIDUALS =
+    as.character(SeqArray::seqGetData(context$gds, "sample.id"))),
+    loci = info$loci, alleles = info$alleles)
+  .legacy_object(d, x, filename, path.folder, "_ldna.rds", overwrite)
+}

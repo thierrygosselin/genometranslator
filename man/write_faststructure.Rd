@@ -2,75 +2,56 @@
 % Please edit documentation in R/write_faststructure.R
 \name{write_faststructure}
 \alias{write_faststructure}
-\title{Write a fastSTRUCTURE file}
+\title{Write fastSTRUCTURE}
 \usage{
 write_faststructure(
   data,
   plink.bed = FALSE,
   pop.levels = NULL,
   filename = NULL,
-  ...
+  strata = NULL,
+  path.folder = getwd(),
+  chunk.size = 32L,
+  overwrite = FALSE,
+  verbose = TRUE
 )
 }
 \arguments{
-\item{data}{A supported genomic file, object, or tidy genomic data frame.
-Default: \code{data = NULL}.}
+\item{data}{Open SeqArray GDS or GDS path. Active whitelists are respected.}
 
-\item{plink.bed}{To export in plink BED format. This will write 3 files:
-\code{.bed}, \code{.bim}, \code{.fam}. For this option to work, the argument
-data must be a GDS file or object.
-Default: \code{plink.bed = FALSE}.}
+\item{plink.bed}{Export PLINK BED instead of text.}
 
-\item{pop.levels}{(optional, string) This refers to the levels in a factor. In this
-case, the id of the pop.
-Use this argument to have the pop ordered your way instead of the default
-alphabetical or numerical order. e.g. \code{pop.levels = c("QUE", "ONT", "ALB")}
-instead of the default \code{pop.levels = c("ALB", "ONT", "QUE")}.
-White spaces in population names are replaced by underscore.
-Default: \code{pop.levels = NULL}.}
+\item{pop.levels}{Population labels in the desired order.}
 
-\item{filename}{(optional) The file name prefix for the faststructure file
-written to the working directory. With default: \code{filename = NULL},
-the date and time is appended to \code{radiator_faststructure_}.
-Default: \code{filename = NULL}.}
+\item{filename}{Optional output basename; use path.folder for the directory.}
 
-\item{...}{other parameters passed to the function.}
+\item{strata}{Metadata table or TSV with INDIVIDUALS and STRATA.}
+
+\item{path.folder}{Output directory.}
+
+\item{chunk.size}{Number of samples per GDS read block.}
+
+\item{overwrite}{Allow replacement of existing output files.}
+
+\item{verbose}{Display progress messages.}
 }
 \value{
-A faststructure file is saved to the working directory.
+Export paths and mappings, or the target object as described above.
 }
 \description{
-Write a faststructure file from a tidy data frame.
-For biallelic dataset only.
-Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
-and \href{https://github.com/thierrygosselin/assigner}{assigner}
-and might be of interest for users.
-Prepare quality-controlled biallelic markers and consider missingness,
-minor-allele frequency, and linkage disequilibrium before export.
+Text has no header and two rows per sample, six metadata columns followed by one allele per locus. Missing alleles are -9. Only biallelic loci are accepted. plink.bed=TRUE delegates to write_plink(format='bed').
 }
-\section{Dependencies}{
-
-Required package dependencies are declared in DESCRIPTION and installed
-with genometranslator. Run \code{genometranslator_dependencies()} to inspect
-core packages, optional packages, and external executables.
-
-The standard text output has no additional R-package dependency. Setting
-\code{plink.bed = TRUE} requires the optional Bioconductor package
-\href{https://bioconductor.org/packages/SNPRelate}{\pkg{SNPRelate}}.
-This writer prepares input files; it does not install or run fastStructure.
+\details{
+GDS selections are restored, including on errors. Partial diploid
+calls are rejected by allele-based conversions. No implicit biological
+filtering or imputation is performed. Safe locus/sample IDs have mapping
+tables. In-memory matrices must fit in RAM; block reads limit temporary memory.
 }
-
-\section{Data filtering}{
-
-This writer does not silently filter markers or individuals. It may validate
-requirements imposed by the destination format and stop with an informative
-error when the input is unsuitable. It is the user's responsibility to
-filter and quality-control the data appropriately for the intended analysis
-before generating the output. Use
-\href{https://thierrygosselin.github.io/radr/}{\pkg{radr}} or another
-suitable workflow when filtering is required.
+\examples{
+\dontrun{
+write_faststructure("study.gds", filename = "study")
 }
-
+}
 \references{
 Raj A, Stephens M, Pritchard JK (2014)
 fastSTRUCTURE: Variational Inference of Population Structure in Large SNP

@@ -1,35 +1,17 @@
-# write a related file from a tidy data frame
-
-#' @name write_related
-
-#' @title Write a related file
-
-#' @description Write a related file from a tidy data frame.
-#' This output file format enables to run the data in the
-#' \href{https://github.com/timothyfrasier/related}{related} R package
-#' (Pew et al. 2015), which is essantially the R version of
-#' \href{https://www.zsl.org/science/software/coancestry}{COANCESTRY} fortran
-#' program developed by Jinliang Wang.
-#' Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
-#' and might be of interest for users.
-
-#' @param data A tidy data frame object in the global environment or
-#' a tidy data frame in wide or long format in the working directory.
-#' \emph{How to get a tidy data frame ?}
-#' Look into \pkg{genometranslator} \code{\link{tidy_genome}}.
-
-#' @param filename (optional) The file name prefix for the related file
-#' written to the working directory. With default: \code{filename = NULL},
-#' the date and time is appended to \code{radiator_related_}.
-#' Default: \code{filename = NULL}.
-#' @inheritParams tidy_genome
-
-#' @param ... other parameters passed to the function.
-
-#' @return A related file is saved to the working directory.
-
-#' @export
-#' @rdname write_related
+#' Write related
+#'
+#' @description Headerless text: sample ID followed by adjacent allele pairs, missing alleles encoded as zero. Positive allele labels are locus-specific codes, not repeat lengths.
+#' @param data Open SeqArray GDS or GDS path. Active whitelists are respected.
+#' @param filename Optional output basename; use path.folder for the directory.
+#' @param path.folder Output directory.
+#' @param chunk.size Number of samples per GDS read block.
+#' @param overwrite Allow replacement of existing output files.
+#' @param verbose Display progress messages.
+#' @details GDS selections are restored, including on errors. Partial diploid
+#' calls are rejected by allele-based conversions. No implicit biological
+#' filtering or imputation is performed. Safe locus/sample IDs have mapping
+#' tables. In-memory matrices must fit in RAM; block reads limit temporary memory.
+#' @return Export paths and mappings, or the target object as described above.
 #' @references Pew J, Muir PH, Wang J, Frasier TR (2015)
 #' related: an R package for analysing pairwise relatedness from codominant
 #' molecular markers.
@@ -38,61 +20,20 @@
 #' COANCESTRY: A program for simulating, estimating and analysing relatedness
 #' and inbreeding coefficients.
 #' Molecular Ecology Resources 11(1): 141-145.
-
+#' @examples
+#' \dontrun{
+#' write_related("study.gds", filename = "study")
+#' }
 #' @author Thierry Gosselin \email{thierrygosselin@@icloud.com}
-#' @template writer-filtering
-#' @template io-dependencies
-
-
-write_related <- function(
-  data,
-  filename = NULL,
-  parallel.core = parallel::detectCores() - 1,
-  ...
-) {
-
-  # Checking for missing and/or default arguments ******************************
-  if (missing(data)) rlang::abort("Input file missing")
-
-  # Import data ---------------------------------------------------------------
-  if (is.vector(data)) {
-    data <- genometranslator::read_genome(data = data, import.metadata = TRUE)
-  }
-
-  # Format for related package -------------------------------------------------
-  split.chunks <- 1L
-  if (parallel.core > 1) split.chunks <- 3L
-
-  data %<>%
-    dplyr::select(INDIVIDUALS, MARKERS, GT) %>%
-    separate_gt(
-      x = .,
-      gt = "GT",
-      gather = TRUE,
-      exclude = c("MARKERS", "INDIVIDUALS"),
-      split.chunks = split.chunks
-      ) %>%
-    dplyr::mutate(
-      MARKERS_ALLELES = stringi::stri_join(MARKERS, ALLELES_GROUP, sep = "."),
-      MARKERS = NULL, ALLELES_GROUP = NULL
-    ) %>%
-    # dplyr::arrange(MARKERS_ALLELES, INDIVIDUALS) %>%
-    tgbase::trans_wide(x = ., formula = "INDIVIDUALS ~ MARKERS_ALLELES", values_from = "ALLELES")
-
-  # Write the file in related format -------------------------------------------
-  # Date and time
-  file.date <- format(Sys.time(), "%Y%m%d@%H%M")
-
-  # Filename -------------------------------------------------------------------
-  if (is.null(filename)) {
-    filename <- stringi::stri_join("radiator_related_", file.date, ".txt")
-  } else {
-    filename.problem <- file.exists(filename)
-    if (filename.problem) {
-      filename <- stringi::stri_join(filename, "_related_", file.date, ".txt")
-    } else {
-      filename <- stringi::stri_join(filename, "_related", ".txt")
-    }
-  }
-  readr::write_delim(x = data, file = filename, delim = " ", col_names = FALSE)
-}# End write_related
+#' @export
+write_related <- function(data, filename = NULL, path.folder = getwd(),
+  chunk.size = 32L, overwrite = FALSE, verbose = TRUE) {
+  start <- .legacy_start("write_related", verbose)
+  on.exit(tgbase::teardown(start), add = TRUE)
+  x <- .legacy_snapshot(data, chunk.size = chunk.size)
+  a <- x$a; a[is.na(a)] <- 0L
+  paths <- .legacy_publish(x, filename, path.folder, "_related.txt", overwrite,
+    function(p) utils::write.table(cbind(x$samples$EXPORT_ID, a), p,
+      quote = FALSE, row.names = FALSE, col.names = FALSE, sep = " "))
+  invisible(list(files = paths, samples = x$samples, loci = x$loci))
+}

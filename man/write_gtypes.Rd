@@ -2,71 +2,51 @@
 % Please edit documentation in R/gtypes.R
 \name{write_gtypes}
 \alias{write_gtypes}
-\title{Write a gtypes object}
+\title{Write gtypes}
 \usage{
-write_gtypes(data, write = FALSE, filename = NULL)
+write_gtypes(
+  data,
+  write = FALSE,
+  filename = NULL,
+  strata = NULL,
+  path.folder = getwd(),
+  chunk.size = 32L,
+  overwrite = FALSE,
+  verbose = TRUE
+)
 }
 \arguments{
-\item{data}{A supported genomic file, object, or tidy genomic data frame.
-Default: \code{data = NULL}.}
+\item{data}{Open SeqArray GDS or GDS filename.}
 
-\item{write}{(logical, optional) To write in the working directory the gtypes
-object. The file is written with \code{radiator_gtypes_DATE@TIME.RData} if no
-filename is provided and can be open with load or readRDS.
-Default: \code{write = FALSE}.}
+\item{write}{Write the returned object as RDS.}
 
-\item{filename}{(character, optional) Filename prefix.
-Default: \code{filename = NULL}.}
+\item{filename}{Output basename.}
+
+\item{strata}{Optional metadata table or TSV with INDIVIDUALS and STRATA.}
+
+\item{path.folder}{Output directory.}
+
+\item{chunk.size}{Number of samples per GDS read block.}
+
+\item{overwrite}{Replace existing output files.}
+
+\item{verbose}{Display progress messages.}
 }
 \value{
-An object of the class \href{https://github.com/EricArcher/}{strataG} is returned.
+The target object with export.files and locus mapping attributes.
 }
 \description{
-Write a
-\href{https://github.com/EricArcher/strataG}{strataG} object from a tidy data frame.
-Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
-and might be of interest for users.
+Create the target diploid object directly from GDS allele indices. Multiallelic loci are supported except by genlight, which requires biallelic loci.
 }
-\section{Dependencies}{
-
-Required package dependencies are declared in DESCRIPTION and installed
-with genometranslator. Run \code{genometranslator_dependencies()} to inspect
-core packages, optional packages, and external executables.
-
-\code{gtypes} support requires the optional GitHub package
-\href{https://github.com/EricArcher/strataG}{\pkg{strataG}}. Consult its
-repository for current installation and troubleshooting information.
+\details{
+Uses active GDS whitelists and restores selections on exit.
+No implicit filtering or imputation. Partial missing calls are rejected.
+In-memory objects must fit in RAM. Numeric alleles are labels, not repeat sizes.
 }
-
-\section{Data filtering}{
-
-This writer does not silently filter markers or individuals. It may validate
-requirements imposed by the destination format and stop with an informative
-error when the input is unsuitable. It is the user's responsibility to
-filter and quality-control the data appropriately for the intended analysis
-before generating the output. Use
-\href{https://thierrygosselin.github.io/radr/}{\pkg{radr}} or another
-suitable workflow when filtering is required.
-}
-
 \examples{
 \dontrun{
-# require(strataG)
-# with radiator GDS
-turtle <- genometranslator::write_gtypes(data = "my.metadata.node.rad")
-
-# with tidy data
-turtle <- genometranslator::write_gtypes(data = "my.radiator.rad")
+write_gtypes("study.gds", strata = "samples.tsv")
 }
-}
-\references{
-Archer FI, Adams PE, Schneiders BB.
-strataG: An r package for manipulating, summarizing and analysing population
-genetic data.
-Molecular Ecology Resources. 2017; 17: 5-11. doi:10.1111/1755-0998.12559
-}
-\seealso{
-\href{https://github.com/EricArcher/}{strataG}
 }
 \author{
 Thierry Gosselin \email{thierrygosselin@icloud.com}

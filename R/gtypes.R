@@ -14,7 +14,7 @@
 #' standardize its sample, stratum, locus, and allele fields as a tidy genotype
 #' table. Required data-slot columns and diploid allele counts are validated.
 
-#' @param data A gtypes object (>= v.2.0.2) in the global environment.
+#' @param data A gtypes object (>= v.2.0.2), or its saved RDS file.
 
 #' @param verbose Logical indicating whether progress messages are emitted.
 #' Default: \code{verbose = FALSE}.
@@ -52,6 +52,7 @@ read_gtypes <- function(data, verbose = FALSE) {
 
   # Checking for missing and/or default arguments ------------------------------
   if (missing(data)) rlang::abort("A gtypes object is required.")
+  if (is.character(data) && length(data) == 1L) data <- readRDS(data)
   if (!inherits(data, "gtypes")) rlang::abort("Input is not a gtypes object.")
 
   # import ---------------------------------------------------------------------
@@ -84,6 +85,20 @@ read_gtypes <- function(data, verbose = FALSE) {
   # detect stratg genotype coding ----------------------------------------------
   # For GT = c("A", "C", "G", "T")
   gt.format <- sort(unique(as.character(input$GT[!is.na(input$GT)])))
+  for (field in c("INDIVIDUALS", "STRATA", "MARKERS")) {
+    input[[field]] <- as.character(input[[field]])
+    if (anyNA(input[[field]]) || any(!nzchar(input[[field]])))
+      rlang::abort("gtypes IDs, populations and loci cannot be missing.")
+  }
+  raw.ids <- unique(input$INDIVIDUALS)
+  if (anyDuplicated(genometranslator::clean_ind_names(raw.ids)))
+    rlang::abort("Individual names collide after cleaning.")
+  if (length(gt.format) && all(grepl("^[0-9]+$", gt.format)) &&
+      any(as.numeric(gt.format) > 999))
+    rlang::abort("Numeric allele codes above 999 cannot fit the tidy GT format.")
+  if (any(vapply(split(input$GT, input$MARKERS),
+      function(z) length(unique(z[!is.na(z)])), integer(1)) > 999L))
+    rlang::abort("More than 999 alleles at a locus cannot fit the tidy GT format.")
 
   # Nucleotide alleles use a stable A/C/G/T integer mapping. Numeric alleles
   # retain their codes; other labels are encoded per locus.
@@ -151,205 +166,42 @@ read_gtypes <- function(data, verbose = FALSE) {
 }#End read_gtypes
 
 
-# write_gtypes -----------------------------------------------------------------
-
-#' @name write_gtypes
-#' @title Write a gtypes object
-#' @section Dependencies:
-#' Required package dependencies are declared in DESCRIPTION and installed
-#' with genometranslator. Run `genometranslator_dependencies()` to inspect
-#' core packages, optional packages, and external executables.
+#' Write gtypes
 #'
-#' \code{gtypes} support requires the optional GitHub package
-#' \href{https://github.com/EricArcher/strataG}{\pkg{strataG}}. Consult its
-#' repository for current installation and troubleshooting information.
-
-#' @description Write a
-#' \href{https://github.com/EricArcher/strataG}{strataG} object from a tidy data frame.
-#' Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
-#' and might be of interest for users.
-
-#' @inheritParams genometranslator_common_arguments
-
-#' @param write (logical, optional) To write in the working directory the gtypes
-#' object. The file is written with \code{radiator_gtypes_DATE@TIME.RData} if no
-#' filename is provided and can be open with load or readRDS.
-#' Default: \code{write = FALSE}.
-#'
-#' @param filename (character, optional) Filename prefix.
-#' Default: \code{filename = NULL}.
-
-#' @return An object of the class \href{https://github.com/EricArcher/}{strataG} is returned.
-
-
-
-#' @export
-#' @rdname write_gtypes
-#' @seealso \href{https://github.com/EricArcher/}{strataG}
-
-#' @references Archer FI, Adams PE, Schneiders BB.
-#' strataG: An r package for manipulating, summarizing and analysing population
-#' genetic data.
-#' Molecular Ecology Resources. 2017; 17: 5-11. doi:10.1111/1755-0998.12559
-
+#' @description Create the target diploid object directly from GDS allele indices. Multiallelic loci are supported except by genlight, which requires biallelic loci.
+#' @param data Open SeqArray GDS or GDS filename.
+#' @param write Write the returned object as RDS.
+#' @param filename Output basename.
+#' @param strata Optional metadata table or TSV with INDIVIDUALS and STRATA.
+#' @param path.folder Output directory.
+#' @param chunk.size Number of samples per GDS read block.
+#' @param overwrite Replace existing output files.
+#' @param verbose Display progress messages.
+#' @return The target object with export.files and locus mapping attributes.
+#' @details Uses active GDS whitelists and restores selections on exit.
+#' No implicit filtering or imputation. Partial missing calls are rejected.
+#' In-memory objects must fit in RAM. Numeric alleles are labels, not repeat sizes.
 #' @examples
 #' \dontrun{
-#' # require(strataG)
-#' # with radiator GDS
-#' turtle <- genometranslator::write_gtypes(data = "my.metadata.node.rad")
-#'
-#' # with tidy data
-#' turtle <- genometranslator::write_gtypes(data = "my.radiator.rad")
+#' write_gtypes("study.gds", strata = "samples.tsv")
 #' }
-
 #' @author Thierry Gosselin \email{thierrygosselin@@icloud.com}
-#' @template writer-filtering
-
-write_gtypes <- function(data, write = FALSE, filename = NULL) {
-  # Loading the namespace registers the S4 `gtypes` class used below.
-  if (!requireNamespace("strataG", quietly = TRUE)) {
-    rlang::abort(paste0(
-      "`write_gtypes()` requires the optional GitHub package strataG. ",
-      "Install it with `remotes::install_github(\"EricArcher/strataG\")`."
-    ))
-  }
-
-  # Checking for missing and/or default arguments ------------------------------
-  if (missing(data)) rlang::abort("Input file missing")
-
-  # File type detection---------------------------------------------------------
-  data.type <- genometranslator::detect_genomic_format(data)
-
-  # Import data ----------------------------------------------------------------
-  if (data.type %in% c("SeqVarGDSClass", "gds.file")) {
-
-    # Required package -----------------------------------------------------------
-    tgbase::check_package(package = "SeqArray", cran = FALSE, bioc = TRUE)
-
-    if (data.type == "gds.file") data %<>% genometranslator::read_genome(data = .)
-    # biallelic <- detect_biallelic_markers(data)# faster with GDS
-    markers.meta <- extract_markers_metadata(gds = data, markers.meta.select = "MARKERS", whitelist = TRUE)
-    strata <- extract_individuals_metadata(gds = data, ind.field.select = c("INDIVIDUALS", "STRATA"), whitelist = TRUE)
-
-    data <- SeqArray::seqGetData(
-      gdsfile = data, var.name = "$dosage_alt") %>%
-      magrittr::set_colnames(x = ., value = markers.meta$MARKERS) %>%
-      magrittr::set_rownames(x = ., value = strata$INDIVIDUALS) %>%
-      tgbase::trans_long(
-        x = .,
-        cols = "INDIVIDUALS",
-        names_to = "MARKERS",
-        values_to = "ALT_DOSAGE",
-        keep_rownames = "INDIVIDUALS"
-        ) %>%
-      dplyr::left_join(strata, by = "INDIVIDUALS") %>%
-      dplyr::mutate(
-        `1` = dplyr::if_else(ALT_DOSAGE == 0L, 1L, ALT_DOSAGE),
-        `2` = dplyr::recode(.x = ALT_DOSAGE, `1` = 2L, `0` = 1L),
-        ALT_DOSAGE = NULL
-      ) %>%
-      tgbase::trans_long(
-        x = .,
-        cols = c("INDIVIDUALS", "STRATA", "MARKERS"),
-        names_to = "ALLELES",
-        values_to = "GT"
-        ) %>%
-      tgbase::trans_wide(
-        x = .,
-        formula = "STRATA + INDIVIDUALS ~ MARKERS + ALLELES",
-        values_from = "GT",
-        sep = "."
-      ) %>%
-      dplyr::arrange(STRATA, INDIVIDUALS)
-
-    markers.meta <- strata <- NULL
-
-
-  } else {#Tidy data
-    data %<>% genometranslator::read_genome(data = ., import.metadata = TRUE)
-
-    if (rlang::has_name(data, "ALT_DOSAGE")) {
-      data  %<>%
-        dplyr::select(MARKERS, STRATA, INDIVIDUALS, ALT_DOSAGE) %>%
-        dplyr::mutate(
-          `1` = dplyr::if_else(ALT_DOSAGE == 0L, 1L, ALT_DOSAGE),
-          `2` = dplyr::recode(.x = ALT_DOSAGE, `1` = 2L, `0` = 1L),
-          ALT_DOSAGE = NULL
-        ) %>%
-        tgbase::trans_long(
-          x = .,
-          cols = c("INDIVIDUALS", "STRATA", "MARKERS"),
-          names_to = "ALLELES",
-          values_to = "GT"
-        ) %>%
-        tgbase::trans_wide(
-          x = .,
-          formula = "STRATA + INDIVIDUALS ~ MARKERS + ALLELES",
-          values_from = "GT",
-          sep = "."
-        ) %>%
-        dplyr::arrange(STRATA, INDIVIDUALS)
-    } else {
-      if (!rlang::has_name(data, "GT")) data %<>% calibrate_alleles(data = ., gt = TRUE) %$% input
-      data %<>%
-        dplyr::select(STRATA, INDIVIDUALS, MARKERS, GT) %>%
-        dplyr::arrange(MARKERS, STRATA, INDIVIDUALS) %>%
-        dplyr::mutate(
-          GT = replace(GT, which(GT == "000000"), NA),
-          STRATA = as.character(STRATA),
-          `1` = stringi::stri_sub(str = GT, from = 1, to = 3), # most of the time: faster than tidyr::separate
-          `2` = stringi::stri_sub(str = GT, from = 4, to = 6),
-          GT = NULL
-        ) %>%
-        tgbase::trans_long(
-          x = .,
-          cols = c("INDIVIDUALS", "STRATA", "MARKERS"),
-          names_to = "ALLELES",
-          values_to = "GT"
-        ) %>%
-        tgbase::trans_wide(
-          x = .,
-          formula = "STRATA + INDIVIDUALS ~ MARKERS + ALLELES",
-          values_from = "GT",
-          sep = "."
-        ) %>%
-        dplyr::arrange(STRATA, INDIVIDUALS)
-    }
-  }
-
-  # gtypes----------------------------------------------------------------------
-  safe_gtypes <-  purrr::safely(.f = methods::new)
-
-  res <- suppressWarnings(
-    safe_gtypes(
-      "gtypes",
-      gen.data = data[,-c(1,2)],
-      ploidy = 2,
-      ind.names = data$INDIVIDUALS,
-      strata = data$STRATA,
-      schemes = NULL,
-      sequences = NULL,
-      description = NULL,
-      other = NULL
-    )
-  )
-
-  if (is.null(res$error)) {
-    res <- res$result
-  } else {
-    rlang::abort("strataG package must be installed and loaded: library('strataG')")
-  }
-
-  if (write) {
-    filename.temp <- generate_filename(name.shortcut = filename, extension = "gtypes")
-    filename.short <- filename.temp$filename.short
-    filename.gtypes <- filename.temp$filename
-    saveRDS(object = res, file = filename.gtypes)
-    message("File written: ", filename.short)
-  }
-
-  return(res)
-}# End write_gtypes
+#' @export
+write_gtypes <- function(data, write = FALSE, filename = NULL,
+  strata = NULL, path.folder = getwd(), chunk.size = 32L, overwrite = FALSE,
+  verbose = TRUE) {
+  start <- .legacy_start("write_gtypes", verbose)
+  on.exit(tgbase::teardown(start), add = TRUE)
+  .export_flag(write, "write"); .legacy_package("strataG")
+  x <- .legacy_snapshot(data, strata, TRUE, chunk.size = chunk.size)
+  colnames(x$a) <- as.vector(rbind(paste0(x$loci$EXPORT_ID, ".1"),
+    paste0(x$loci$EXPORT_ID, ".2")))
+  out <- strataG::df2gtypes(data.frame(id = x$samples$INDIVIDUALS,
+    strata = x$samples$GROUP, x$a, check.names = FALSE),
+    ploidy = 2L, id.col = 1L, strata.col = 2L, loc.col = 3L)
+  .legacy_object(out, x, if (write) if (is.null(filename)) "gtypes" else filename
+    else NULL, path.folder, "_gtypes.rds", overwrite)
+}
 
 # switch_genotypes -------------------------------------------------------------
 #' @name switch_genotypes

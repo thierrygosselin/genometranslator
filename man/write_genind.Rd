@@ -2,56 +2,51 @@
 % Please edit documentation in R/genind.R
 \name{write_genind}
 \alias{write_genind}
-\title{Write a genind object}
+\title{Write genind}
 \usage{
-write_genind(data, write = FALSE, verbose = FALSE)
+write_genind(
+  data,
+  write = FALSE,
+  verbose = FALSE,
+  filename = NULL,
+  strata = NULL,
+  path.folder = getwd(),
+  chunk.size = 32L,
+  overwrite = FALSE
+)
 }
 \arguments{
-\item{data}{A supported genomic file, object, or tidy genomic data frame.
-Default: \code{data = NULL}.}
+\item{data}{Open SeqArray GDS or GDS filename.}
 
-\item{write}{(logical, optional) To write in the working directory the genind
-object. The file is written with \code{radiator_genind_DATE@TIME.RData} and
-can be open with load or readRDS.
-Default: \code{write = FALSE}.}
+\item{write}{Write the returned object as RDS.}
 
-\item{verbose}{Logical indicating whether progress messages are emitted.
-Default: \code{verbose = FALSE}.}
+\item{verbose}{Display progress messages.}
+
+\item{filename}{Output basename.}
+
+\item{strata}{Optional metadata table or TSV with INDIVIDUALS and STRATA.}
+
+\item{path.folder}{Output directory.}
+
+\item{chunk.size}{Number of samples per GDS read block.}
+
+\item{overwrite}{Replace existing output files.}
+}
+\value{
+The target object with export.files and locus mapping attributes.
 }
 \description{
-Write a genind object from a tidy data frame.
-Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
-and \href{https://github.com/thierrygosselin/assigner}{assigner}
-and might be of interest for users.
+Create the target diploid object directly from GDS allele indices. Multiallelic loci are supported except by genlight, which requires biallelic loci.
 }
-\section{Dependencies}{
-
-Required package dependencies are declared in DESCRIPTION and installed
-with genometranslator. Run \code{genometranslator_dependencies()} to inspect
-core packages, optional packages, and external executables.
-
-Reading and writing \code{genind} objects requires the optional CRAN package
-\href{https://cran.r-project.org/package=adegenet}{\pkg{adegenet}}.
+\details{
+Uses active GDS whitelists and restores selections on exit.
+No implicit filtering or imputation. Partial missing calls are rejected.
+In-memory objects must fit in RAM. Numeric alleles are labels, not repeat sizes.
 }
-
-\section{Data filtering}{
-
-This writer does not silently filter markers or individuals. It may validate
-requirements imposed by the destination format and stop with an informative
-error when the input is unsuitable. It is the user's responsibility to
-filter and quality-control the data appropriately for the intended analysis
-before generating the output. Use
-\href{https://thierrygosselin.github.io/radr/}{\pkg{radr}} or another
-suitable workflow when filtering is required.
+\examples{
+\dontrun{
+write_genind("study.gds", strata = "samples.tsv")
 }
-
-\references{
-Jombart T (2008) adegenet: a R package for the multivariate
-analysis of genetic markers. Bioinformatics, 24, 1403-1405.
-
-Jombart T, Ahmed I (2011) adegenet 1.3-1:
-new tools for the analysis of genome-wide SNP data.
-Bioinformatics, 27, 3070-3071.
 }
 \author{
 Thierry Gosselin \email{thierrygosselin@icloud.com}

@@ -2,60 +2,53 @@
 % Please edit documentation in R/write_structure.R
 \name{write_structure}
 \alias{write_structure}
-\title{Write a STRUCTURE file}
+\title{Write STRUCTURE}
 \usage{
-write_structure(data, pop.levels = NULL, filename = NULL, ...)
+write_structure(
+  data,
+  pop.levels = NULL,
+  filename = NULL,
+  strata = NULL,
+  path.folder = getwd(),
+  chunk.size = 32L,
+  overwrite = FALSE,
+  verbose = TRUE
+)
 }
 \arguments{
-\item{data}{A tidy data frame object in the global environment or
-a tidy data frame in wide or long format in the working directory.
-\emph{How to get a tidy data frame ?}
-Look into \pkg{genometranslator} \code{\link{tidy_genome}}.}
+\item{data}{Open SeqArray GDS or GDS path. Active whitelists are respected.}
 
-\item{pop.levels}{(optional, string) This refers to the levels in a factor. In this
-case, the id of the pop.
-Use this argument to have the pop ordered your way instead of the default
-alphabetical or numerical order. e.g. \code{pop.levels = c("QUE", "ONT", "ALB")}
-instead of the default \code{pop.levels = c("ALB", "ONT", "QUE")}.
-White spaces in population names are replaced by underscore.
-Default: \code{pop.levels = NULL}.}
+\item{pop.levels}{Population labels in the desired order.}
 
-\item{filename}{(optional) The file name prefix for the structure file
-written to the working directory. With default: \code{filename = NULL},
-the date and time is appended to \code{radiator_structure_}.
-Default: \code{filename = NULL}.}
+\item{filename}{Optional output basename; use path.folder for the directory.}
 
-\item{...}{other parameters passed to the function.}
+\item{strata}{Metadata table or TSV with INDIVIDUALS and STRATA.}
+
+\item{path.folder}{Output directory.}
+
+\item{chunk.size}{Number of samples per GDS read block.}
+
+\item{overwrite}{Allow replacement of existing output files.}
+
+\item{verbose}{Display progress messages.}
 }
 \value{
-A structure file is saved to the working directory.
+Export paths and mappings, or the target object as described above.
 }
 \description{
-Write a structure file from a tidy data frame
-Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
-and \href{https://github.com/thierrygosselin/assigner}{assigner}
-and might be of interest for users.
+Two rows per diploid sample, a locus header, sample label and numeric population. Set ONEROWPERIND=0, LABEL=1, POPDATA=1, MARKERNAMES=1 and MISSING=-9 in STRUCTURE. Allele codes are positive locus-specific labels.
 }
-\section{Data filtering}{
-
-This writer does not silently filter markers or individuals. It may validate
-requirements imposed by the destination format and stop with an informative
-error when the input is unsuitable. It is the user's responsibility to
-filter and quality-control the data appropriately for the intended analysis
-before generating the output. Use
-\href{https://thierrygosselin.github.io/radr/}{\pkg{radr}} or another
-suitable workflow when filtering is required.
+\details{
+GDS selections are restored, including on errors. Partial diploid
+calls are rejected by allele-based conversions. No implicit biological
+filtering or imputation is performed. Safe locus/sample IDs have mapping
+tables. In-memory matrices must fit in RAM; block reads limit temporary memory.
 }
-
-\section{Dependencies}{
-
-Required package dependencies are declared in \code{DESCRIPTION} and are
-installed with \pkg{genometranslator}. Any additional dependency needed only
-for this format or option is identified in this help page. Use
-\code{genometranslator_dependencies()} to inspect the availability of core
-packages, optional packages, and external executables.
+\examples{
+\dontrun{
+write_structure("study.gds", filename = "study")
 }
-
+}
 \references{
 Pritchard JK, Stephens M, Donnelly P. (2000)
 Inference of population structure using multilocus genotype data.

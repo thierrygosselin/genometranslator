@@ -679,3 +679,188 @@ write_genome(genome) # synchronize and close the GDS connection
 
 Always consult the selected reader and writer documentation for format-specific
 dependencies, validation rules, and data-preparation recommendations.
+
+### Genetic stock identification exports
+
+`write_gsi_sim()` and `write_rubias()` accept diploid GDS files or open GDS
+objects. They respect the active selections and metadata whitelists without
+performing additional biological filtering. Both read genotypes in sample blocks,
+support multiallelic loci, and preserve allele identities in mapping tables.
+Neither format retains phase, coverage, or genotype likelihoods.
+
+```{r gsi-export, eval=FALSE}
+gsi <- genometranslator::write_gsi_sim(
+  "study.gds", strata = "samples.tsv", filename = "baseline",
+  path.folder = "exports"
+)
+r <- genometranslator::write_rubias(
+  "study.gds", strata = "samples.tsv", filename = "study",
+  path.folder = "exports"
+)
+```
+
+For an all-reference rubias dataset, metadata needs `INDIVIDUALS` and `STRATA`.
+For reference and mixture samples together, supply `INDIVIDUALS`,
+`SAMPLE_TYPE`, `REPUNIT`, and `COLLECTION`. Reference collections must each
+belong to one reporting unit. Mixtures require `REPUNIT = NA` and a distinct
+collection name identifying their sampling group. Export them together, then
+separate the returned rows: this keeps allele coding and locus columns aligned.
+The genetic columns start at column 5. The returned rubias tibble must fit in
+memory despite block-wise GDS reads.
+
+The gsi_sim writer streams a text file with safe sample, population and locus
+identifiers, plus mapping TSV files. Its return value is now a list; the genotype
+file is `gsi$files[1]`. Export baseline and mixture inputs separately with the
+same marker selection and allele dictionaries. Fully missing calls are zero pairs
+in gsi_sim and NA pairs in rubias; partially missing diploid calls are rejected
+by both writers. Existing files are protected unless `overwrite = TRUE`.
+These writers now require GDS input; import other formats with `read_genome()`
+first. The unused `parallel.core` argument was removed from `write_rubias()`.
+
+See the [official gsi_sim documentation](https://github.com/eriqande/gsi_sim)
+and [rubias input guide](https://eriqande.github.io/rubias/articles/rubias-overview.html).
+The method references are Anderson, Waples and Kalinowski (2008),
+*Canadian Journal of Fisheries and Aquatic Sciences* 65:1475–1486;
+Anderson (2010), *Molecular Ecology Resources* 10:701–710; and
+Moran and Anderson (2019), *Canadian Journal of Fisheries and Aquatic Sciences*
+76:551–560, [doi:10.1139/cjfas-2018-0016](https://doi.org/10.1139/cjfas-2018-0016).
+These tools prepare input, not an analysis: reference design, batch effects,
+linked loci and marker ascertainment still need careful consideration.
+
+### Genepop exchange
+
+`read_genepop()` validates diploid Genepop files, including population separators,
+individual records continued across lines, and two- or three-digit allele codes
+(four or six digits per diploid genotype). Coding widths may differ between loci,
+but must be consistent within a locus. Haploid records are explicitly rejected.
+Missing allele copies are retained as `000`; they are not converted to observed
+alleles. The result is a long tibble by default, or a wide table with `tidy = FALSE`.
+
+`write_genepop()` reads the active GDS selection in sample blocks, without first
+building a full long genotype table. It also accepts validated long tables with
+`STRATA`, `INDIVIDUALS`, `MARKERS`, and `GT`. Population assignments can be supplied
+with `strata` for GDS input. Files are protected against accidental overwriting.
+
+```{r genepop-exchange, eval=FALSE}
+export <- genometranslator::write_genepop(
+  data = "study.gds", strata = "samples.tsv", filename = "study",
+  path.folder = "exports", chunk.size = 32L
+)
+calls <- genometranslator::read_genepop(export$files[1])
+```
+
+The writer uses safe sample and locus names and writes companion sample,
+population, locus, and allele mapping tables. GDS alleles receive numeric labels
+(`001`, `002`, and so on); these labels are not microsatellite repeat lengths.
+Genepop supports multiallelic loci, but this export does not retain phasing,
+coverage, genotype likelihoods, or reference coordinates in the genotype file.
+Keep the GDS and companion tables for those purposes. See the
+[official Genepop input specification](https://f-rousset.r-universe.dev/genepop/doc/the-input-file.html)
+for the format rules.
+
+### Exporting to kinference
+
+`write_kinference()` saves a `gbasics::snpgeno` object as RDS, together with
+sample, locus and allele mapping tables. It preserves the active GDS selection
+and matches optional sample metadata by `INDIVIDUALS`, retaining columns such
+as sampling year, age, sex and plate. These covariates matter for interpretation
+and subsequent CKMR models; providing them does not adjust the genetic analysis
+for population structure or batch effects.
+
+```{r kinference-export, eval=FALSE}
+kin <- genometranslator::write_kinference(
+  data = "study.gds", strata = "samples.tsv",
+  filename = "study", path.folder = "exports"
+)
+# No-null model, after appropriate population and genotype QC:
+kin <- kinference::est_ALF_nonulls(kin)
+kin <- kinference::kin_power(kin, k = 0.5)
+```
+
+This first exporter supports complete, polymorphic, diploid biallelic nucleotide
+SNPs. REF maps to A and ALT to B; they are not necessarily major/minor alleles.
+The standard four-way labels AAO, AB and BBO are used, but no biological nulls
+are inferred. Ordinary missing calls are **not** OO double-nulls. Missing or
+partial calls therefore stop export; they are never automatically imputed,
+discarded, or converted to biological absence. Depth and likelihoods remain in
+the original GDS. The output and conversion matrices must fit in memory.
+
+kinference is a specialised kin-finding and QC toolkit for Close-Kin
+Mark-Recapture, not a demographic-model fitter or an automated pedigree builder.
+Its strengths include attention to false-positive/false-negative rates, null
+alleles, and the effect of linkage on close-kin statistics without requiring a
+reference assembly. Its assumptions still matter: high-quality calls, a
+genetically homogeneous population, approximately HWE loci, and limited LD.
+Accounting empirically for physical linkage does not correct plate effects or
+make dense, strongly LD-correlated whole-genome panels suitable without thinning.
+Select the population and markers deliberately before export. Complete-case
+filtering itself can alter ascertainment and should also be assessed.
+
+In kinference 1.2.48, testing identified loss of character pair IDs in the
+duplicate and HSP finders, and a resulting error in the POP finder.
+Use `ij_numeric = TRUE` and map indices back through
+`kin$info$INDIVIDUALS`. The upstream automatic-threshold implementation also
+requires caution: its range check and variance-estimation subset can fail or
+truncate the data used to estimate the HSP variance. Do not treat a returned
+threshold as validated solely because the function completed.
+
+Reference: Bravington MV, Baylis SM, Eveson JP, Feutry P (2026).
+*kinference: Pairwise kinship detection for Close-Kin Mark-Recapture*.
+bioRxiv preprint, [doi:10.64898/2026.05.18.725841](https://doi.org/10.64898/2026.05.18.725841).
+See the [kinference manual and vignette](https://closekin.r-universe.dev/kinference)
+and [gbasics input documentation](https://markbravington.r-universe.dev/gbasics).
+
+### Other population-genetic exports and R objects
+
+The following writers accept a SeqArray GDS path or open GDS object. They use
+the active sample and marker selection and restore it even when export fails.
+Import other formats first with `read_genome()`. Export does not silently remove
+incompatible loci, impute missing calls, or infer phase. Allele-based writers
+reject partially missing diploid calls; fully missing calls use the target
+format's missing-value convention.
+
+| Destination | Function | Important requirements |
+|:--|:--|:--|
+| FSTAT / hierfstat | `write_hierfstat()` | Diploid allele codes; supports multiallelic loci. |
+| adegenet genind | `write_genind()` | Diploid codominant data; supports multiallelic loci. |
+| adegenet genlight | `write_genlight()` | Biallelic ALT dosage. |
+| strataG gtypes | `write_gtypes()` | Diploid allele pairs; optional strataG package. |
+| STRUCTURE | `write_structure()` | Two rows per individual, locus header, missing `-9`. |
+| fastSTRUCTURE | `write_faststructure()` | Biallelic; two rows and six metadata columns, or PLINK BED. |
+| BayeScan | `write_bayescan()` | Population allele counts; rejects unobserved population–locus cells. |
+| fineRADstructure / RADpainter | `write_fineradstructure()` | One variant record per locus with haplotype alleles; no unphased SNP concatenation. |
+| HapMap | `write_hapmap()` | Biallelic nucleotide SNPs with real reference coordinates. |
+| HZAR | `write_hzar()` | Biallelic frequencies and called sample counts; explicit population distances. |
+| LDna | `write_ldna()` | Pairwise r² matrix; quadratic memory, with a marker-count guard. |
+| pcadapt | `write_pcadapt()` | Locus-by-individual biallelic ALT dosage; missing `9`. |
+| related | `write_related()` | Individual identifier and diploid allele pairs; missing `0`. |
+| SNPRelate | `write_snprelate()` | Biallelic SNPRelate GDS; close the returned handle after use. |
+| stockR | `write_stockr()` | Locus-by-individual biallelic dosage and sample groups. |
+
+These are exchange formats, not substitutes for the original GDS. Depth,
+likelihoods, phase, and annotations are not preserved by most targets. Safe
+identifiers and allele encodings are documented in companion mapping tables;
+object outputs also carry mapping attributes. Most conversions create an
+in-memory matrix, so the selected dataset must fit in RAM. Blocked GDS reads
+reduce temporary allocation but do not make the resulting R objects file-backed.
+
+`read_fstat()`, `read_genind()`, `read_genlight()`, and `read_gtypes()` validate
+their respective input representations. The object readers accept saved RDS
+files. genind locus names containing periods are preserved, and genlight dosage
+orientation is retained. For genind and genlight, requesting tidy output returns
+the table without also creating a GDS; their GDS conversion currently requires
+biallelic data. Multiallelic data can still be represented in the tidy result.
+
+`radr::run_bayescan()` can export an active GDS selection, including population
+subsamples. It validates numerical settings, quotes file paths, and stops on
+external-process failure or missing results. Successful execution does not
+establish that BayeScan's population model fits the study design.
+
+`write_maverick()` has been removed. Use `write_structure()` when STRUCTURE input
+is appropriate; software-specific settings still require independent checking.
+
+Consult the [fastSTRUCTURE input documentation](https://github.com/rajanil/fastStructure),
+[BayeScan documentation](https://github.com/mfoll/BayeScan),
+[fineRADstructure documentation](https://www.milan-malinsky.org/fineradstructure),
+and [pcadapt guide](https://bcm-uga.github.io/pcadapt/articles/pcadapt.html)
+before running the downstream analysis.

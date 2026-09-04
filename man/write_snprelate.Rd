@@ -2,66 +2,42 @@
 % Please edit documentation in R/write_snprelate.R
 \name{write_snprelate}
 \alias{write_snprelate}
-\title{Write a SNPRelate file}
+\title{Write SNPRelate}
 \usage{
-write_snprelate(data, biallelic = TRUE, filename = NULL, verbose = TRUE)
+write_snprelate(
+  data,
+  filename = NULL,
+  verbose = TRUE,
+  path.folder = getwd(),
+  overwrite = FALSE
+)
 }
 \arguments{
-\item{data}{A tidy data frame object in the global environment or
-a tidy data frame in wide or long format in the working directory.
-\emph{How to get a tidy data frame ?}
-Look into \pkg{genometranslator} \code{\link{tidy_genome}}.
-\strong{The genotypes are biallelic.}}
+\item{data}{Open SeqArray GDS or GDS path. Active whitelists are respected.}
 
-\item{biallelic}{(logical, optional) If you already know that the data is
-biallelic use this argument to speed up the function.
-Default: \code{biallelic = TRUE}.}
+\item{filename}{Optional output basename; use path.folder for the directory.}
 
-\item{filename}{(optional) The file name of the Genomic Data Structure (GDS) file.
-radiator will append \code{.gds} to the filename.
-If filename chosen is already present in the
-working directory, the default \code{radiator_snprelate_datetime.gds} is chosen.
-Default: \code{filename = NULL}.}
+\item{verbose}{Display progress messages.}
+
+\item{path.folder}{Output directory.}
+
+\item{overwrite}{Allow replacement of existing output files.}
 }
 \value{
-An object in the global environment of class
-\code{"SNPGDSFileClass", "gds.class"} and
-a file in the working directory.
+Export paths and mappings, or the target object as described above.
 }
 \description{
-Write a \href{https://github.com/zhengxwen/SNPRelate}{SNPRelate}
-object from a tidy data frame.
-Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
-and might be of interest for users.
-SNPRelate analyses commonly require biallelic SNPs and may require linkage
-disequilibrium pruning. Make those filtering decisions before export for the
-intended SNPRelate analysis.
+Converts the active SeqArray selection directly using SeqArray::seqGDS2SNP. Requires SNPRelate and biallelic loci. Returns an open read-only SNPRelate GDS; close it with SNPRelate::snpgdsClose.
 }
-\section{Dependencies}{
-
-Required package dependencies are declared in DESCRIPTION and installed
-with genometranslator. Run \code{genometranslator_dependencies()} to inspect
-core packages, optional packages, and external executables.
-
-This writer requires the optional Bioconductor package
-\href{https://bioconductor.org/packages/SNPRelate}{\pkg{SNPRelate}}.
+\details{
+GDS selections are restored, including on errors. Partial diploid
+calls are rejected by allele-based conversions. No implicit biological
+filtering or imputation is performed. Safe locus/sample IDs have mapping
+tables. In-memory matrices must fit in RAM; block reads limit temporary memory.
 }
-
-\section{Data filtering}{
-
-This writer does not silently filter markers or individuals. It may validate
-requirements imposed by the destination format and stop with an informative
-error when the input is unsuitable. It is the user's responsibility to
-filter and quality-control the data appropriately for the intended analysis
-before generating the output. Use
-\href{https://thierrygosselin.github.io/radr/}{\pkg{radr}} or another
-suitable workflow when filtering is required.
-}
-
 \examples{
 \dontrun{
-require(SNPRelate)
-data.gds <- genometranslator::write_snprelate(data = "shark.rad")
+write_snprelate("study.gds", filename = "study")
 }
 }
 \references{
@@ -69,9 +45,6 @@ Zheng X, Levine D, Shen J, Gogarten SM, Laurie C, Weir BS.
 A high-performance computing toolset for relatedness and principal component
 analysis of SNP data. Bioinformatics. 2012;28: 3326-3328.
 doi:10.1093/bioinformatics/bts606
-}
-\seealso{
-\href{https://github.com/zhengxwen/SNPRelate}{SNPRelate}
 }
 \author{
 Thierry Gosselin \email{thierrygosselin@icloud.com}

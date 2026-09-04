@@ -17,7 +17,7 @@ Default: \code{tidy = TRUE}.}
 Currently, for biallelic datasets only.
 Default: \code{gds = TRUE}.}
 
-\item{write}{Logical. Write the tidy table as an Arrow/Parquet file.
+\item{write}{Logical. Save the tidy table as a uniquely named RDS file.
 Default: \code{write = FALSE}.}
 
 \item{verbose}{Logical indicating whether progress messages are emitted.
@@ -26,8 +26,9 @@ Default: \code{verbose = FALSE}.}
 \value{
 With \code{tidy = TRUE}, a tidy tibble. With
 \code{tidy = FALSE, gds = TRUE}, the generated GDS result. With both options
-false, the original \code{genind} object. Multiallelic input disables GDS
-generation and returns tidy data when requested.
+false, the original \code{genind} object. tidy=TRUE takes precedence and does
+not create a GDS as a side effect. Requesting GDS for multiallelic input is an
+explicit error; the tidy representation supports multiallelic loci.
 }
 \description{
 Import an \pkg{adegenet} \code{genind} object, standardize its
@@ -43,8 +44,9 @@ position, read depth, allele depth, etc.
 \href{https://github.com/thibautjombart/adegenet}{genlight} object is a more
 interesting container and is memory efficient, see \code{\link{read_genlight}}.
 
-By default allele names will be kept for the tidy dataset,
-if the alleles is numeric and length < 3.
+Alleles are assigned stable codes in the object's allele order. The
+allele_dictionary attribute retains the original allele labels. Locus names,
+including periods, are preserved rather than parsed as allele separators.
 
 In the unlikely event that the genind object as no stratification/population,
 \emph{pop} will be added to the strata column.

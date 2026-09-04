@@ -1,95 +1,48 @@
-# write a structure file from a tidy data frame
-
-#' @name write_structure
-#' @title Write a STRUCTURE file
-#' @description Write a structure file from a tidy data frame
-#' Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
-#' and \href{https://github.com/thierrygosselin/assigner}{assigner}
-#' and might be of interest for users.
-
-#' @param data A tidy data frame object in the global environment or
-#' a tidy data frame in wide or long format in the working directory.
-#' \emph{How to get a tidy data frame ?}
-#' Look into \pkg{genometranslator} \code{\link{tidy_genome}}.
-
-#' @inheritParams read_strata
-
-#' @param filename (optional) The file name prefix for the structure file
-#' written to the working directory. With default: \code{filename = NULL},
-#' the date and time is appended to \code{radiator_structure_}.
-
-#' Default: \code{filename = NULL}.
-#' @param ... other parameters passed to the function.
-
-#' @return A structure file is saved to the working directory.
-
-#' @export
-#' @rdname write_structure
+#' Write STRUCTURE
+#'
+#' @description Two rows per diploid sample, a locus header, sample label and numeric population. Set ONEROWPERIND=0, LABEL=1, POPDATA=1, MARKERNAMES=1 and MISSING=-9 in STRUCTURE. Allele codes are positive locus-specific labels.
+#' @param data Open SeqArray GDS or GDS path. Active whitelists are respected.
+#' @param pop.levels Population labels in the desired order.
+#' @param filename Optional output basename; use path.folder for the directory.
+#' @param strata Metadata table or TSV with INDIVIDUALS and STRATA.
+#' @param path.folder Output directory.
+#' @param chunk.size Number of samples per GDS read block.
+#' @param overwrite Allow replacement of existing output files.
+#' @param verbose Display progress messages.
+#' @details GDS selections are restored, including on errors. Partial diploid
+#' calls are rejected by allele-based conversions. No implicit biological
+#' filtering or imputation is performed. Safe locus/sample IDs have mapping
+#' tables. In-memory matrices must fit in RAM; block reads limit temporary memory.
+#' @return Export paths and mappings, or the target object as described above.
 #' @references Pritchard JK, Stephens M, Donnelly P. (2000)
 #' Inference of population structure using multilocus genotype data.
 #' Genetics. Genetics Society of America. 155: 945–959.
-
+#' @examples
+#' \dontrun{
+#' write_structure("study.gds", filename = "study")
+#' }
 #' @author Thierry Gosselin \email{thierrygosselin@@icloud.com}
-#' @template writer-filtering
-#' @template io-dependencies
-
-write_structure <- function(
-  data,
-  pop.levels = NULL,
-  filename = NULL,
-  ...
-) {
-
-  # Checking for missing and/or default arguments ******************************
-  if (missing(data)) rlang::abort("Input file missing")
-
-  # Import data ---------------------------------------------------------------
-  data %<>% genometranslator::read_genome(data = .) %>%
-    dplyr::select(STRATA, INDIVIDUALS, MARKERS, GT)
-
-  # pop.levels -----------------------------------------------------------------
+#' @export
+write_structure <- function(data, pop.levels = NULL, filename = NULL,
+  strata = NULL, path.folder = getwd(), chunk.size = 32L, overwrite = FALSE,
+  verbose = TRUE) {
+  start <- .legacy_start("write_structure", verbose)
+  on.exit(tgbase::teardown(start), add = TRUE)
+  x <- .legacy_snapshot(data, strata, TRUE, chunk.size = chunk.size)
+  groups <- x$populations$GROUP
   if (!is.null(pop.levels)) {
-    data %<>%
-      dplyr::mutate(
-        STRATA = factor(STRATA, levels = pop.levels, ordered = TRUE),
-        STRATA = droplevels(STRATA)
-      ) %>%
-      dplyr::arrange(STRATA, INDIVIDUALS, MARKERS)
-  } else {
-    data %<>%
-      dplyr::mutate(STRATA = factor(STRATA)) %>%
-      dplyr::arrange(STRATA, INDIVIDUALS, MARKERS)
+    if (anyNA(pop.levels) || anyDuplicated(pop.levels) || !setequal(groups, pop.levels))
+      stop("pop.levels must list every population exactly once.")
+    groups <- pop.levels
   }
-
-  # Create a marker vector  ------------------------------------------------
-  markers <- dplyr::distinct(.data = data, MARKERS) %>%
-    dplyr::arrange(MARKERS) %>%
-    purrr::flatten_chr(.)
-
-  # Structure format ----------------------------------------------------------------
-  data %<>%
-    genometranslator::separate_gt(x = ., gt = "GT", gather = TRUE, exclude = c("STRATA", "INDIVIDUALS", "MARKERS"), split.chunks = 1L) %>%
-    dplyr::mutate(
-      ALLELES = dplyr::recode(.x = ALLELES, "000" = "-9"),
-      ALLELES = as.integer(ALLELES)
-    ) %>%
-    tgbase::trans_wide(x = ., formula = "INDIVIDUALS + STRATA ~ MARKERS + ALLELES_GROUP", values_from = "ALLELES") %>%
-    dplyr::mutate(STRATA = as.integer(STRATA)) %>%
-    dplyr::arrange(STRATA, INDIVIDUALS)
-
-  # Write the file in structure format -----------------------------------------
-
-  # Filename
-  if (is.null(filename)) {
-    file.date <- format(Sys.time(), "%Y%m%d@%H%M")
-    filename <- stringi::stri_join("radiator_structure_", file.date, ".str")
-  } else {
-    filename <- stringi::stri_join(filename, ".str")
-  }
-
-  filename.connection <- file(filename, "w") # open the connection to the file
-  writeLines(text = stringi::stri_join(markers, sep = "\t", collapse = "\t"),
-             con = filename.connection, sep = "\n")
-  close(filename.connection) # close the connection
-  readr::write_tsv(x = data, file = filename, append = TRUE, col_names = FALSE)
-} # end write_structure
+  x$samples$POP <- match(x$samples$GROUP, groups)
+  a <- x$a; a[is.na(a)] <- -9L
+  paths <- .legacy_publish(x, filename, path.folder, ".str", overwrite, function(p) {
+    con <- file(p, "wt"); on.exit(close(con))
+    writeLines(paste(x$loci$EXPORT_ID, collapse = "\t"), con)
+    for (i in seq_len(nrow(a))) for (copy in 1:2)
+      writeLines(paste(c(x$samples$EXPORT_ID[i], x$samples$POP[i],
+        a[i, seq.int(copy, ncol(a), 2L)]), collapse = "\t"), con)
+  })
+  invisible(list(files = paths, samples = x$samples, loci = x$loci))
+}

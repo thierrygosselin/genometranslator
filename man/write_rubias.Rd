@@ -2,98 +2,79 @@
 % Please edit documentation in R/write_rubias.R
 \name{write_rubias}
 \alias{write_rubias}
-\title{Write a rubias file}
+\title{Write rubias}
 \usage{
 write_rubias(
   data,
   strata = NULL,
   filename = NULL,
-  parallel.core = parallel::detectCores() - 1,
-  verbose = TRUE
+  verbose = TRUE,
+  path.folder = getwd(),
+  chunk.size = 32L,
+  overwrite = FALSE
 )
 }
 \arguments{
-\item{data}{A GDS file or object, or another genomic object accepted by
-\code{\link[=read_genome]{read_genome()}}.}
+\item{data}{An open SeqArray GDS object or a GDS filename.}
 
-\item{strata}{Optional sample metadata accepted by \code{\link[=read_strata]{read_strata()}}. Supply
-\code{SAMPLE_TYPE}, \code{REPUNIT}, \code{COLLECTION}, and \code{INDIVIDUALS} for full control.
-Lower-case rubias names are also accepted. When these fields are absent,
-\code{STRATA} or \code{POP_ID} is used for both \code{repunit} and \code{collection}, and all
-samples are treated as references. Default: \code{strata = NULL}.}
+\item{strata}{Metadata table or TSV. Use INDIVIDUALS and STRATA for an
+all-reference dataset, or INDIVIDUALS, SAMPLE_TYPE, REPUNIT and COLLECTION.
+Lowercase rubias names (indiv, sample_type, repunit, collection) also work.
+NULL uses GDS metadata. Extra metadata samples are ignored; every active sample
+must be covered exactly once.}
 
-\item{filename}{Optional filename prefix. When supplied, the result is written
-as \verb{<filename>_rubias.tsv}; a timestamp is added rather than overwriting an
-existing file. Default: \code{filename = NULL}.}
+\item{filename}{Optional output basename; NULL returns the table without files.}
 
-\item{parallel.core}{Number of workers available while importing or
-transforming supported inputs. Retained for consistency with other writers.
-Default: \code{parallel.core = parallel::detectCores() - 1}.}
+\item{verbose}{Display progress messages.}
 
-\item{verbose}{Logical. Display progress messages. Default:
-\code{verbose = TRUE}.}
+\item{path.folder}{Output directory.}
+
+\item{chunk.size}{Maximum individuals read per genotype block.}
+
+\item{overwrite}{Allow replacement of existing output files.}
 }
 \value{
-A tibble compatible with rubias. When \code{filename} is supplied, the
-same table is also written as a tab-separated file.
+A rubias tibble. Attributes loci, alleles and files contain the mapping
+tables and any output paths. Genetic columns start at column 5.
 }
 \description{
-Convert a supported genomic dataset to the diploid,
-two-column-per-locus data frame used by \pkg{rubias}. The first four columns
-are \code{sample_type}, \code{repunit}, \code{collection}, and \code{indiv}.
+Create the two-column-per-locus rubias tibble directly from active
+diploid GDS genotypes, optionally writing it and mapping tables to disk.
 }
 \details{
-rubias requires one row per diploid individual and four leading
-character columns:
-\itemize{
-\item \code{sample_type} must be \code{"reference"} or \code{"mixture"};
-\item reference samples require non-missing \code{repunit} and \code{collection};
-\item mixture samples require \code{repunit = NA}, while \code{collection} identifies
-the mixture sample, port, stratum, place, or time group;
-\item \code{indiv} must uniquely identify every individual.
+The first columns are sample_type, repunit, collection and indiv.
+Reference collections must belong to exactly one reporting unit.
+Mixture repunit values must be NA, and collection identifies the mixture group.
+Incomplete explicit rubias metadata is rejected rather than replaced by
+all-reference defaults. GDS selections and whitelists are respected and
+selections restored after success or failure.
+
+Adjacent allele columns use safe L1/L1.2 names with an original-marker map.
+Allele labels start at one within each locus, including multiallelic loci.
+Missing diploid calls have two NA values. Partial calls are rejected.
+This exporter supports diploids only, not rubias's special haploid convention.
+Block reads reduce temporary memory, but the returned wide tibble must fit in
+memory. Export reference and mixture together before separating their rows to
+ensure identical locus columns and allele coding.
+The export does not perform stock identification, marker selection or quality
+filtering, and does not preserve phase, depth or genotype likelihoods.
+The legacy unused parallel.core argument has been removed.
 }
-Missing genotypes are written as two \code{NA} alleles. Partial diploid genotypes
-are rejected. Locus names cannot contain spaces because rubias uses adjacent
-columns to identify gene copies.
-
-This writer creates an input representation; it does not run the conditional
-GSI model and does not silently filter individuals or loci. Quality control,
-marker selection, reference design, and the distinction between reference and
-mixture samples remain the user's responsibility.
+\examples{
+\dontrun{
+x <- write_rubias("study.gds", strata = "samples.tsv", filename = "study")
+# rubias functions use gen_start_col = 5.
 }
-\section{Dependencies}{
-
-The output schema follows the documented interface of
-\href{https://github.com/eriqande/rubias}{rubias}, developed by Eric C.
-Anderson and Ben Moran. Installing rubias is not required to create the table,
-but is required to analyse it. This implementation is independently written
-from the public input specification; no rubias source code is incorporated.
-
-
-Required package dependencies are declared in \code{DESCRIPTION} and are
-installed with \pkg{genometranslator}. Any additional dependency needed only
-for this format or option is identified in this help page. Use
-\code{genometranslator_dependencies()} to inspect the availability of core
-packages, optional packages, and external executables.
 }
-
-\section{Data filtering}{
-
-This writer does not silently filter markers or individuals. It may validate
-requirements imposed by the destination format and stop with an informative
-error when the input is unsuitable. It is the user's responsibility to
-filter and quality-control the data appropriately for the intended analysis
-before generating the output. Use
-\href{https://thierrygosselin.github.io/radr/}{\pkg{radr}} or another
-suitable workflow when filtering is required.
-}
-
 \references{
 Moran BM, Anderson EC (2019). Bayesian inference from the
-conditional genetic stock identification model. Canadian Journal of
-Fisheries and Aquatic Sciences, 76(4), 551-560.
-\doi{10.1139/cjfas-2018-0016}.
+conditional genetic stock identification model. Canadian Journal of Fisheries
+and Aquatic Sciences 76:551-560. \doi{10.1139/cjfas-2018-0016}.
 }
 \seealso{
-\href{https://github.com/eriqande/rubias}{rubias}, \code{\link[=write_gsi_sim]{write_gsi_sim()}}
+\href{https://eriqande.github.io/rubias/articles/rubias-overview.html}{Official rubias input documentation},
+\code{\link[=write_gsi_sim]{write_gsi_sim()}}
+}
+\author{
+Thierry Gosselin \email{thierrygosselin@icloud.com}
 }

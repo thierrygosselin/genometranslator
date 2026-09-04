@@ -2,92 +2,80 @@
 % Please edit documentation in R/write_gsi_sim.R
 \name{write_gsi_sim}
 \alias{write_gsi_sim}
-\title{Write a gsi_sim file}
+\title{Write gsi_sim}
 \usage{
 write_gsi_sim(
   data,
   pop.levels = NULL,
   pop.labels = NULL,
   strata = NULL,
-  filename = "gsi_sim.unname.txt"
+  filename = "gsi_sim",
+  group.column = "STRATA",
+  path.folder = getwd(),
+  chunk.size = 32L,
+  overwrite = FALSE,
+  verbose = TRUE
 )
 }
 \arguments{
-\item{data}{A tidy genomic data set in the working directory tidy formats.
-\emph{How to get a tidy data frame ?}
-Look for \pkg{genometranslator} \code{\link{tidy_genome}}.}
+\item{data}{An open SeqArray GDS object or a GDS filename.}
 
-\item{pop.levels}{(option, string) This refers to the levels in a factor. In this
-case, the id of the pop.
-Use this argument to have the pop ordered your way instead of the default
-alphabetical or numerical order. e.g. \code{pop.levels = c("QUE", "ONT", "ALB")}
-instead of the default \code{pop.levels = c("ALB", "ONT", "QUE")}.
-Default: \code{pop.levels = NULL}. If you find this too complicated, there is also the
-\code{strata} argument that can do the same thing, see below.}
+\item{pop.levels}{Character vector listing every population once, in export
+order. NULL uses first appearance in the active sample order.}
 
-\item{pop.labels}{(optional, string) Use this argument to rename/relabel
-your pop or combine your pop. e.g. To combine \code{"QUE"} and \code{"ONT"}
-into a new pop called \code{"NEW"}:
-(1) First, define the levels for your pop with \code{pop.levels} argument:
-\code{pop.levels = c("QUE", "ONT", "ALB")}.
-(2) then, use \code{pop.labels} argument:
-\code{pop.levels = c("NEW", "NEW", "ALB")}.#'
-To rename \code{"QUE"} to \code{"TAS"}:
-\code{pop.labels = c("TAS", "ONT", "ALB")}.
-Default: \code{pop.labels = NULL}. If you find this too complicated, there is also the
-\code{strata} argument that can do the same thing, see below.}
+\item{pop.labels}{Optional non-empty labels corresponding to pop.levels.
+Repeated labels explicitly merge populations.}
 
-\item{strata}{(optional) A tab delimited file with 2 columns with header:
-\code{INDIVIDUALS} and \code{STRATA}.
-Default: \code{strata = NULL}. Use this argument to rename or change
-the populations id with the new \code{STRATA} column.
-The \code{STRATA} column can be any hierarchical grouping.}
+\item{strata}{Optional sample metadata table or TSV containing INDIVIDUALS
+and the grouping column. NULL uses the GDS metadata.}
 
-\item{filename}{The name of the file written to the working directory.
-Default: \code{filename = "gsi_sim.unname.txt"}.}
+\item{filename}{Output basename (optionally ending in .txt).}
+
+\item{group.column}{Population column in metadata. Default: STRATA.}
+
+\item{path.folder}{Output directory.}
+
+\item{chunk.size}{Maximum individuals read per genotype block.}
+
+\item{overwrite}{Allow replacement of existing output files.}
+
+\item{verbose}{Display progress messages.}
 }
 \value{
-A gsi_sim input file is saved to the working directory.
+Invisibly, a list containing files and sample, population, locus and
+allele mapping tables.
 }
 \description{
-Write a gsi_sim file from a data frame (wide or long/tidy).
-Used internally in \href{https://github.com/thierrygosselin/assigner}{assigner} and
-\href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
-and might be of interest for users.
+Export active diploid GDS genotypes in the gsi_sim text format.
+Genotypes are read in sample blocks; no full tidy genotype table is created.
 }
-\section{Data filtering}{
-
-This writer does not silently filter markers or individuals. It may validate
-requirements imposed by the destination format and stop with an informative
-error when the input is unsuitable. It is the user's responsibility to
-filter and quality-control the data appropriately for the intended analysis
-before generating the output. Use
-\href{https://thierrygosselin.github.io/radr/}{\pkg{radr}} or another
-suitable workflow when filtering is required.
+\details{
+Only diploid GDS input is accepted. Active selections and metadata
+whitelists are respected and restored, including after errors. No additional
+biological filtering is performed. Multiallelic loci are supported.
+Alleles are numbered from one within each GDS locus; zero denotes missing.
+Partially missing calls are rejected, not silently imputed.
+Safe S/P/L identifiers are used with companion mapping TSV files.
+Export baseline and mixture samples separately, using the same marker selection
+and allele dictionaries. The writer does not run gsi_sim.
+Phase, coverage and genotype likelihoods are not represented by this format.
 }
-
-\section{Dependencies}{
-
-Required package dependencies are declared in \code{DESCRIPTION} and are
-installed with \pkg{genometranslator}. Any additional dependency needed only
-for this format or option is identified in this help page. Use
-\code{genometranslator_dependencies()} to inspect the availability of core
-packages, optional packages, and external executables.
+\examples{
+\dontrun{
+write_gsi_sim("study.gds", strata = "samples.tsv", filename = "baseline")
 }
-
+}
 \references{
-Anderson, Eric C., Robin S. Waples, and Steven T. Kalinowski. (2008)
-An improved method for predicting the accuracy of genetic stock identification.
-Canadian Journal of Fisheries and Aquatic Sciences 65, 7:1475-1486.
-
-Anderson, E. C. (2010) Assessing the power of informative subsets of
-loci for population assignment: standard methods are upwardly biased.
-Molecular ecology resources 10, 4:701-710.
+Anderson EC, Waples RS, Kalinowski ST (2008). An improved method
+for predicting the accuracy of genetic stock identification. Canadian Journal
+of Fisheries and Aquatic Sciences 65:1475-1486.
+Anderson EC (2010). Assessing the power of informative subsets of loci for
+population assignment: standard methods are upwardly biased. Molecular Ecology
+Resources 10:701-710.
 }
 \seealso{
-\href{https://github.com/eriqande/gsi_sim}{gsi_sim} and
-\href{https://github.com/eriqande/rubias}{rubias}: genetic stock
-identification (GSI) in the tidyverse.
+\href{https://github.com/eriqande/gsi_sim}{Official gsi_sim documentation},
+\code{\link[=write_rubias]{write_rubias()}}
 }
 \author{
 Thierry Gosselin \email{thierrygosselin@icloud.com}

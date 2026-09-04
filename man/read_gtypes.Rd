@@ -7,7 +7,7 @@
 read_gtypes(data, verbose = FALSE)
 }
 \arguments{
-\item{data}{A gtypes object (>= v.2.0.2) in the global environment.}
+\item{data}{A gtypes object (>= v.2.0.2), or its saved RDS file.}
 
 \item{verbose}{Logical indicating whether progress messages are emitted.
 Default: \code{verbose = FALSE}.}

@@ -81,292 +81,101 @@
 #' @template io-dependencies
 
 
-read_fstat <- function(
-    data,
-    strata = NULL,
-    tidy = TRUE,
-    filename = NULL,
-    verbose = FALSE
-) {
-
-  # Common startup -------------------------------------------------------------
-  .start <- tgbase::startup(
-    package = "genometranslator",
-    f.name = "read_fstat",
-    verbose = verbose
-  )
-  on.exit(tgbase::teardown(.start), add = TRUE)
-
-  # Checking for missing and/or default arguments-------------------------------
-  if (missing(data)) rlang::abort("An FSTAT file or table is required.")
-
-
-  # Import data ------------------------------------------------------------------
-  if (is.character(data) && length(data) == 1L) {
-    if (!file.exists(data)) rlang::abort("The FSTAT file does not exist.")
-    data <- readr::read_delim(file = data, delim = "?", col_names = "data", col_types = "c")
-  } else if (inherits(data, "data.frame")) {
-    if (ncol(data) != 1L) {
-      rlang::abort("An in-memory FSTAT table must contain exactly one column.")
-    }
-    names(data) <- "data"
-    data <- tibble::as_tibble(data)
-  } else {
-    rlang::abort("`data` must be one FSTAT file path or a one-column table.")
-  }
-
-  # replace potential white space character: [\t\n\f\r\p{Z}] -----------------------------
-  data$data %<>%
-    stringi::stri_replace_all_regex(
-      str = .,
-      pattern = "\\s+",
-      replacement = "\t",
-      vectorize_all = FALSE
-    )
-
-  # metadata -------------------------------------------------------------------
-  fstat.first.line <- data %>%
-    dplyr::slice(1) %>%
-    tidyr::separate(col = data, into = c("np", "nl", "nu", "allele.coding"), sep = "\t")
-  header <- suppressWarnings(as.integer(unlist(fstat.first.line[1, ], use.names = FALSE)))
-  if (length(header) != 4L || anyNA(header) || any(header <= 0L)) {
-    rlang::abort("The FSTAT header must contain four positive integers: np, nl, nu, and allele coding width.")
-  }
-  names(header) <- c("np", "nl", "nu", "allele.coding")
-
-  # create a data frame --------------------------------------------------------
-
-  # markers
-  markers <- data %>%
-    dplyr::slice(2:(header[["nl"]] + 1L)) %>%
-    purrr::flatten_chr(.x = .)
-  markers <- trimws(markers)
-  if (length(markers) != header[["nl"]] || any(!nzchar(markers))) {
-    rlang::abort("The number of FSTAT locus names does not match `nl` in the header.")
-  }
-  if (anyDuplicated(markers)) rlang::abort("FSTAT locus names must be unique.")
-
-  # Isolate the genotypes and pop column
-  data %<>%
-    dplyr::slice(-(1:(header[["nl"]] + 1L)))
-
-  # separate the dataset by tab
-  genotype.rows <- stringi::stri_split_fixed(str = data$data, pattern = "\t")
-  expected.fields <- header[["nl"]] + 1L
-  if (any(lengths(genotype.rows) != expected.fields)) {
-    bad.rows <- which(lengths(genotype.rows) != expected.fields)
-    rlang::abort(paste0(
-      "FSTAT genotype rows do not contain one population field and `nl` genotypes: ",
-      paste(utils::head(bad.rows, 10L), collapse = ", "), "."
-    ))
-  }
-  data <- tibble::as_tibble(
-    do.call(rbind, genotype.rows),
-    .name_repair = "minimal"
-  ) %>%
-    magrittr::set_colnames(x = ., c("STRATA", markers))
-
-  # Create a string of id
-  id <- tibble::tibble(INDIVIDUALS = paste0("IND-", seq_len(nrow(data))))
-
-  # bind with data
-  data <- dplyr::bind_cols(id, data)
-
-  # Population info ------------------------------------------------------------
-  # Strata
-
+read_fstat <- function(data, strata = NULL, tidy = TRUE, filename = NULL,
+  verbose = FALSE) {
+  start <- .legacy_start("read_fstat", verbose)
+  on.exit(tgbase::teardown(start), add = TRUE)
+  .export_flag(tidy, "tidy")
+  lines <- if (is.character(data) && length(data) == 1L && file.exists(data))
+    readLines(data, warn = FALSE) else if (is.data.frame(data) && ncol(data) == 1L)
+      as.character(data[[1]]) else stop("Supply an FSTAT path or one-column table.")
+  lines <- trimws(lines)
+  if (anyNA(lines) || any(!nzchar(lines))) stop("Empty FSTAT records are not allowed.")
+  h <- strsplit(lines[1], "\\s+")[[1]]
+  if (length(h) != 4L || any(!grepl("^[0-9]+$", h)))
+    stop("FSTAT header requires four positive integers.")
+  h <- as.integer(h)
+  if (anyNA(h) || any(h < 1L) || !h[4] %in% 1:3 || h[3] >= 10^h[4])
+    stop("Invalid FSTAT population/locus count, maximum allele or coding width.")
+  if (length(lines) <= h[2] + 1L) stop("FSTAT contains no genotype rows.")
+  markers <- lines[seq_len(h[2]) + 1L]
+  if (anyDuplicated(markers) || any(markers %in% c("STRATA", "INDIVIDUALS")))
+    stop("FSTAT locus names must be unique and not reserved.")
+  rows <- strsplit(lines[-seq_len(h[2] + 1L)], "\\s+")
+  if (any(lengths(rows) != h[2] + 1L))
+    stop("FSTAT rows do not contain one population field and nl genotypes.")
+  m <- do.call(rbind, rows)
+  if (any(!grepl("^[0-9]+$", m[, 1]))) stop("Invalid FSTAT population code.")
+  pop <- as.integer(m[, 1])
+  if (anyNA(pop) || any(pop < 1L | pop > h[1])) stop("Population outside FSTAT header range.")
+  gt <- m[, -1, drop = FALSE]
+  if (any(!grepl("^[0-9]+$", gt)) || any(nchar(gt) != 2L*h[4]))
+    stop("Genotype width does not match the FSTAT header.")
+  a <- as.integer(substr(gt, 1, h[4])); b <- as.integer(substr(gt, h[4]+1, 2*h[4]))
+  if (any(a > h[3] | b > h[3])) stop("Allele exceeds the FSTAT header maximum.")
+  gt[] <- paste0(sprintf("%03d", a), sprintf("%03d", b))
+  ids <- paste0("IND-", seq_len(nrow(gt)))
+  groups <- as.character(pop)
   if (!is.null(strata)) {
-    strata <- genometranslator::read_strata(strata = strata) %$% strata
-    data <- dplyr::select(data, -STRATA) %>%
-      dplyr::left_join(strata, by = "INDIVIDUALS")
-    if (anyNA(data$STRATA)) {
-      rlang::abort("Some FSTAT individuals are absent from the supplied strata metadata.")
-    }
+    meta <- genometranslator::read_strata(strata, verbose = FALSE)$strata
+    groups <- as.character(meta$STRATA[match(ids, meta$INDIVIDUALS)])
+    if (anyNA(groups)) stop("Some FSTAT individuals are absent from strata.")
   }
+  out <- if (tidy) tibble::tibble(STRATA = rep(groups, h[2]),
+    INDIVIDUALS = rep(ids, h[2]), MARKERS = rep(markers, each = length(ids)),
+    GENOTYPE = as.vector(gt)) else dplyr::bind_cols(
+      tibble::tibble(STRATA = groups, INDIVIDUALS = ids),
+      tibble::as_tibble(gt, .name_repair = function(x) markers))
+  if (!is.null(filename)) readr::write_tsv(out, filename)
+  out
+}
 
-  # Tidy -------------------------------------------------------------------------
-
-  # work on the genotype field
-  data %<>%
-    tgbase::trans_long(
-      x = .,
-      cols = c("STRATA", "INDIVIDUALS"),
-      names_to = "MARKERS",
-      values_to = "GENOTYPE",
-      variable_factor = FALSE
-    ) %>%
-    tidyr::separate(
-      col = GENOTYPE, into = c("A1", "A2"), sep = header[["allele.coding"]]
-    ) %>%
-    dplyr::mutate(
-      A1 = stringi::stri_pad_left(str = A1, pad = "0", width = 3),
-      A2 = stringi::stri_pad_left(str = A2, pad = "0", width = 3)
-    ) %>%
-    tidyr::unite(GENOTYPE, A1, A2, sep = "")
-
-  # wide format
-  if (!tidy) {
-    data %<>%
-      tgbase::trans_wide(
-        x = .,
-        formula = "STRATA + INDIVIDUALS ~ MARKERS",
-        values_from = "GENOTYPE"
-      ) %>%
-      dplyr::arrange(STRATA, INDIVIDUALS)
-  }
-
-  # writing to a file  ---------------------------------------------------------
-  if (!is.null(filename)) {
-    readr::write_tsv(x = data, file = filename, col_names = TRUE)
-  }
-
-  return(data)
-} # end read_fstat
-
-
-# write_hierfstat --------------------------------------------------------------
-
-#' @name write_hierfstat
-#' @title Write a hierfstat file
-
-#' @description Write a hierfstat file from a tidy data frame.
-#' Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
-#' and \href{https://github.com/thierrygosselin/assigner}{assigner}
-#' and might be of interest for users.
-
-#' @param data A tidy data frame object in the global environment or
-#' a tidy data frame in wide or long format in the working directory.
-#' \emph{How to get a tidy data frame ?}
-#' Look into \pkg{genometranslator} \code{\link{tidy_genome}}.
-
-#' @param filename (optional) The file name prefix for the hierfstat file
-#' written to the working directory. With default: \code{filename = NULL},
-#' the date and time is appended to \code{radiator_hierfstat_}.
-
-#' Default: \code{filename = NULL}.
-#' @return A hierfstat file is saved to the working directory.
-
-
-
-#' @export
-#' @rdname write_hierfstat
-#' @references Goudet, J. (1995) FSTAT (Version 1.2): A computer program to
-#' calculate F- statistics. Journal of Heredity, 86, 485-486.
-#' @references Goudet, J. (2005) hierfstat, a package for r to compute and test hierarchical F-statistics. Molecular Ecology Notes, 5, 184-186.
-
+#' Write FSTAT
+#'
+#' @description Write an FSTAT text file and return a hierfstat-style data frame. Allele width follows the dictionary (one to three digits), rather than assuming single-digit alleles.
+#' @param data Open SeqArray GDS or GDS filename.
+#' @param filename Output basename.
+#' @param strata Optional metadata table or TSV with INDIVIDUALS and STRATA.
+#' @param path.folder Output directory.
+#' @param chunk.size Number of samples per GDS read block.
+#' @param overwrite Replace existing output files.
+#' @param verbose Display progress messages.
+#' @return The target object with export.files and locus mapping attributes.
+#' @details Uses active GDS whitelists and restores selections on exit.
+#' No implicit filtering or imputation. Partial missing calls are rejected.
+#' In-memory objects must fit in RAM. Numeric alleles are labels, not repeat sizes.
+#' @examples
+#' \dontrun{
+#' write_hierfstat("study.gds", strata = "samples.tsv")
+#' }
 #' @author Thierry Gosselin \email{thierrygosselin@@icloud.com}
-#' @template writer-filtering
-#' @template io-dependencies
-
-
-write_hierfstat <- function(data, filename = NULL) {
-  file.date <- format(Sys.time(), "%Y%m%d@%H%M")
-
-  # Checking for missing and/or default arguments ------------------------------
-  if (missing(data)) rlang::abort("Input file missing")
-
-  # Import data ---------------------------------------------------------------
-  cli::cli_progress_step("Importing data")
-
-  data %<>% genometranslator::read_genome(data = .)
-
-  if (!rlang::has_name(data, "GT")) {
-    cli::cli_progress_step("Recoding genotypes...")
-    data <- gt_recoding(x = data, gt = TRUE, alt.dosage = FALSE, gt.vcf = FALSE, gt.vcf.nuc = FALSE)
-  }
-
-  cli::cli_progress_step("Preparing data")
-  data %<>%
-    dplyr::select(STRATA, INDIVIDUALS, MARKERS, GT) %>%
-    dplyr::arrange(MARKERS, STRATA, INDIVIDUALS)
-
-  # Create a marker vector  ------------------------------------------------
-  markers <- dplyr::distinct(.data = data, MARKERS) %>%
-    dplyr::arrange(MARKERS) %>%
-    purrr::flatten_chr(.)
-
-  # Get the number of sample (pop) for hierfstat -------------------------------
-  if (is.factor(data$STRATA)) data$STRATA <- droplevels(data$STRATA)
-
-  np <- nlevels(droplevels(data$STRATA))
-  np.message <- stringi::stri_join("    * Number of sample pop, np = ", np, sep = "")
-  cli::cli_progress_step(np.message)
-
-  # Get the number of loci -----------------------------------------------------
-  nl <- length(markers)
-  nl.message <- stringi::stri_join("    * Number of markers, nl = ", nl, sep = "")
-  cli::cli_progress_step(nl.message)
-
-  data <- suppressWarnings(
-    data %>%
-      dplyr::select(MARKERS, STRATA, INDIVIDUALS, GT) %>%
-      dplyr::mutate(
-        GT = replace(GT, which(GT == "000000"), NA),
-        A1 = as.numeric(stringi::stri_sub(str = GT, from = 1, to = 3)),
-        A2 = as.numeric(stringi::stri_sub(str = GT, from = 4, to = 6)),
-        GT = NULL
-      )
-  )
-  # Get the highest number used to label an allele -----------------------------
-  nu <- max(c(unique(data$A1), unique(data$A2)), na.rm = TRUE)
-  nu.message <- stringi::stri_join("    * The highest number used to label an allele, nu = ",
-                                   nu, sep = "")
-  cli::cli_progress_step(nu.message)
-
-  # prep the data  -------------------------------------------------------------
-  data  %<>%
-    dplyr::mutate(
-      GT = stringi::stri_join(A1, A2, sep = ""),
-      A1 = NULL,
-      A2 = NULL,
-      GT = as.numeric(GT)
-    ) %>%
-    tgbase::trans_wide(
-      x = .,
-      formula = "STRATA + INDIVIDUALS ~ MARKERS",
-      values_from = "GT"
-    ) %<>%
-    dplyr::arrange(STRATA, INDIVIDUALS) %>%
-    dplyr::mutate(STRATA = as.integer(STRATA), INDIVIDUALS = NULL)
-
-  # allele coding --------------------------------------------------------------
-  allele.coding <- 1
-  cli::cli_progress_step("    * The alleles are encoded with one digit number")
-
-
-  # Filename -------------------------------------------------------------------
-  if (is.null(filename)) {
-    filename <- stringi::stri_join("radiator_hierfstat_", file.date, ".dat")
-  } else {
-    filename <- stringi::stri_join(filename, "_hierfstat.dat")
-  }
-
-
-  # FSTAT: write the first line ------------------------------------------------
-  cli::cli_progress_step("Writing hierfstat file")
-  fstat.first.line <- stringi::stri_join(np, nl, nu, allele.coding, sep = " ")
-  fstat.first.line <- as.data.frame(fstat.first.line)
-  readr::write_delim(x = fstat.first.line, file = filename, delim = "\n", append = FALSE,
-                     col_names = FALSE)
-
-  # FSTAT: write the locus name to the file
-  loci.table <- as.data.frame(markers)
-  readr::write_delim(
-    x = loci.table,
-    file = filename,
-    delim = "\n",
-    append = TRUE,
-    col_names = FALSE
-  )
-
-  # FSTAT: write the pop and genotypes
-  readr::write_delim(
-    x = data, na = "00",
-    file = filename,
-    delim = "\t",
-    append = TRUE,
-    col_names = FALSE
-  )
-  data <- as.data.frame(data) # required by hierfstat...
-  return(data)
-}# End write_hierfstat
+#' @export
+write_hierfstat <- function(data, filename = NULL, strata = NULL,
+  path.folder = getwd(), chunk.size = 32L, overwrite = FALSE, verbose = TRUE) {
+  start <- .legacy_start("write_hierfstat", verbose)
+  on.exit(tgbase::teardown(start), add = TRUE)
+  x <- .legacy_snapshot(data, strata, TRUE, chunk.size = chunk.size)
+  maximum <- max(x$counts)
+  if (maximum > 999L) stop("FSTAT supports at most three digits per allele.")
+  width <- nchar(as.character(maximum))
+  a <- x$a; a[is.na(a)] <- 0L
+  odd <- seq.int(1L, ncol(a), 2L)
+  calls <- matrix(paste0(sprintf(paste0("%0", width, "d"), a[, odd]),
+    sprintf(paste0("%0", width, "d"), a[, odd+1L])), nrow(a))
+  pop <- match(x$samples$GROUP, x$populations$GROUP)
+  x$samples$FSTAT_POP <- pop
+  paths <- .legacy_publish(x, filename, path.folder, "_fstat.dat", overwrite,
+    function(p) {
+      con <- file(p, "wt"); on.exit(close(con))
+      writeLines(c(paste(nrow(x$populations), nrow(x$loci), maximum, width),
+        x$loci$EXPORT_ID), con)
+      for (i in seq_len(nrow(a)))
+        writeLines(paste(c(pop[i], calls[i, ]), collapse = " "), con)
+    })
+  out <- data.frame(pop = pop, matrix(as.integer(calls), nrow(a)))
+  names(out)[-1] <- x$loci$EXPORT_ID
+  out[-1] <- lapply(out[-1], function(z) {z[z == 0L] <- NA_integer_; z})
+  attr(out, "export.files") <- paths
+  attr(out, "loci") <- x$loci
+  out
+}

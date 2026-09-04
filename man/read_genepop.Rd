@@ -13,173 +13,59 @@ read_genepop(
 )
 }
 \arguments{
-\item{data}{Path to a Genepop file, commonly with extension \code{.gen}, or a
-one-column data frame containing its lines.}
+\item{data}{Filepath or one-column data frame containing all lines,
+including the title.}
 
-\item{strata}{(optional) A tab delimited file with 2 columns. Header:
-\code{INDIVIDUALS} and \code{STRATA}.
-The \code{STRATA} column can be any hierarchical grouping.
-To create a strata file see \code{\link{individuals2strata}}.
-Default: \code{strata = NULL}.}
+\item{strata}{Optional sample metadata accepted by \code{\link[=read_strata]{read_strata()}}. Must
+cover every individual; its STRATA column replaces numbered population blocks.}
 
-\item{tidy}{(optional, logical) With \code{tidy = FALSE},
-the markers are the variables and the genotypes the observations (wide format).
-With the default: \code{tidy = TRUE}, markers and genotypes are variables
-with their own columns (long format).
-Default: \code{tidy = TRUE}.}
+\item{tidy}{TRUE returns long STRATA/INDIVIDUALS/MARKERS/GT data;
+FALSE returns one genotype column per locus.}
 
-\item{filename}{(optional) The file name for the tidy data frame
-written to the working directory.
-With the default, The tidy data is
-in the global environment only (i.e. not written in the working directory).
-Default: \code{filename = NULL}.}
+\item{filename}{Optional TSV output path.}
 
-\item{verbose}{Logical indicating whether progress messages are emitted.
-Default: \code{verbose = FALSE}.}
+\item{verbose}{Display progress messages.}
 }
 \value{
-A tibble in long form with \code{STRATA}, \code{INDIVIDUALS},
-\code{MARKERS}, and six-digit \code{GT}, or wide form when
-\code{tidy = FALSE}. If duplicate individual names are replaced, the
-original-to-generated mapping is stored in the \code{id_conversion}
-attribute. If \code{filename} is supplied, the table is also written as a
-tab-separated file.
+A long or wide tibble, optionally also saved as TSV.
 }
 \description{
-Import and validate diploid data in the Genepop text format.
-Both comma-separated locus names and one-locus-per-line headers are accepted,
-as are one-, two-, and three-digit allele codes. Population blocks, unique
-locus names, genotype-row widths, and genotype coding are checked before a
-long or wide tibble is returned.
+Validate and read diploid Genepop text into a long or wide
+tibble. Two- and three-digit allele codes may differ between loci, but must
+be consistent within each locus. Continued individual records are supported.
 }
 \details{
-\href{https://genepop.curtin.edu.au/help_input.html}{genepop format}
-\enumerate{
-\item \strong{First line:} This line is used to store information about
-your data, any characters are allowed.
-This line is not kept inside \code{read_genepop}.
-\item \strong{Second line:} 2 options i) wide: all the locus are stored on this same
-line with comma (or a comma+space) separator;
-ii) long: the name of the first locus
-(the remaining locus are on separate and subsequent rows with the long format:
-not recommended with genomic datasets with thousands of markers...).
+Zero denotes a missing allele. Partial missing calls are retained;
+each allele is padded to three digits in the returned GT string. Numeric
+allele labels are not nucleotide identities or inferred repeat lengths.
+Blank/duplicate cleaned individual names receive generated identifiers and
+an id_conversion attribute. The original title is retained as genepop_title.
+Population blocks are numbered in file order unless strata is supplied.
+Locus names are trimmed; embedded spaces are removed, and collisions rejected.
 
-The remaining lines are blocks of population and genotypes,
-\href{https://genepop.curtin.edu.au/help_input.html}{for genepop format examples}.
-\item \strong{population identifier:} The population block are separated by
-the word: \code{POP}, or \code{Pop} or \code{pop}. Flavors of the genepop
-software uses the first or the last identifier of every sub-population,
-in all output files, to name populations
-\href{https://genepop.curtin.edu.au/help_input.html}{(more info)}.
-This is not very convenient for population naming and prone to errors,
-this is where the \code{strata} argument inside \code{read_genepop}
-(described above) becomes handy.
-\item \strong{individual identifier:} After the population identifier
-the individuals that belong to the same population are found subsequently on
-separate lines. The genepop format specify you can use any character,
-including a blank space or tab. Spaces are allowed in the identifier names.
-You may leave it blank except for a comma if you wish. The comma between
-the individual identifier and the list of genotypes is required.
-For good naming habit however the function \code{read_genepop} will
-replace \code{"_", ":"} with \code{"-"}, the comma \code{","} along any white
-space characters defined as \code{"\t", "\n", "\f", "\r", "\p{Z}"} found in the individual
-name will be trimmed.
-\item \strong{genotypes:} For each locus, genotypes are separated by one or
-more blank spaces or tab. 0101 indicates that this individual is homozygous
-for the 01 allele at the first locus.
-An alternative input format exists, where each allele is coded by three digits
-(instead of two as described above). However, the total number of
-different alleles, for each locus, should not be higher than 99.
-Missing data is coded with zeros: \code{0000 or 000000}.
+Genepop itself also supports haploid loci, but this reader deliberately
+rejects two- or three-character haploid genotypes rather than inventing
+diploid calls. Genotypes must have four or six numeric characters.
+Empty populations, internal blank lines, malformed rows, duplicate loci and
+inconsistent coding are errors. Continuations cannot cross a Pop separator.
+Genepop does not retain read depth, likelihoods, phase or genomic coordinates;
+prefer GDS or VCF when these are needed.
 }
-}
-\note{
-\href{https://genepop.curtin.edu.au/help_input.html}{genepop format notes:}
-\itemize{
-\item No constraint on blanks separating the various fields.
-\item tabs or spaces allowed.
-\item Loci names can appear on separate lines (long), or on one line (wide)
-if separated by commas.
-\item Individual identifier may have blanks but must end with a comma.
-\item Alleles are numbered from 01 to 99 (or 001 to 999).
-Consecutive numbers to designate alleles are not required.
-\item Populations are defined by the position of the "Pop" separator.
-To group various populations, just remove relevant "Pop" separators.
-\item Missing data should be indicated as 00 (or 000) rather than blanks.
-There are three possibilities for missing data :
-no information (0000) or (000000), partial information
-for first allele (1000) or (010000), partial information
-for second allele (0010) or (000010).
-\item The number of locus names should correspond to the number of genotypes
-in each row.
-If you remove one or several loci from your input file,
-you should remove both their names and the corresponding genotypes.
-\item No empty lines should be found within the file.
-\item No more than one empty line should be present at the end of file.
-}
-\strong{not an ideal genomic format: } The nice thing about RADseq dataset is
-that you have several important genotypes and markers metadata
-(chromosome, locus, snp, position, read depth, allele depth, etc.) available,
-these are all lacking in the genepop format. This format is kept for archival
-reasons and data exchange. VCF or GDS should be preferred when sequencing
-likelihoods, depth, alleles, coordinates, and other metadata must be retained.
-}
-\section{Field handling}{
-
-Genepop population blocks become \code{STRATA}; cleaned sample names become
-\code{INDIVIDUALS}; locus names become \code{MARKERS}; and each allele is
-padded to three digits. Supplied strata metadata replaces embedded population
-blocks and must contain every Genepop individual.
-}
-
-\section{Dependencies}{
-
-Required package dependencies are declared in \code{DESCRIPTION} and are
-installed with \pkg{genometranslator}. Any additional dependency needed only
-for this format or option is identified in this help page. Use
-\code{genometranslator_dependencies()} to inspect the availability of core
-packages, optional packages, and external executables.
-}
-
 \examples{
 \dontrun{
-# We will use the genepop dataset provided with adegenet package
-if (requireNamespace("adegenet", quietly = TRUE)) {
-
-# The simplest form of the function:
-nancycats.tidy <- genometranslator::read_genepop(
-    data = system.file(
-        "files/nancycats.gen",
-        package = "adegenet"
-        )
-    )
-
-# To output a data frame in wide format, with markers in separate columns:
-nancycats.wide <- genometranslator::read_genepop(
-    data = system.file(
-    "files/nancycats.gen",
-    package="adegenet"
-),
-    tidy = FALSE
-)
-}
+x <- read_genepop("study.gen")
+wide <- read_genepop("study.gen", tidy = FALSE)
 }
 }
 \references{
-Raymond M. & Rousset F, (1995).
-GENEPOP (version 1.2): population genetics software for exact tests
-and ecumenicism.
-J. Heredity, 86:248-249
-
-Rousset F.
-genepop'007: a complete re-implementation of the genepop software
-for Windows and Linux.
-Molecular Ecology Resources.
-2008, 8: 103-106.
-doi:10.1111/j.1471-8286.2007.01931.x
-}
-\seealso{
-\href{https://genepop.curtin.edu.au}{genepop}
+Raymond M. and Rousset F. (1995). GENEPOP (version 1.2):
+population genetics software for exact tests and ecumenicism.
+Journal of Heredity 86:248-249.
+Rousset F. (2008). genepop'007: a complete re-implementation of the genepop
+software for Windows and Linux. Molecular Ecology Resources 8:103-106.
+\doi{10.1111/j.1471-8286.2007.01931.x}
+Official input specification:
+\url{https://f-rousset.r-universe.dev/genepop/doc/the-input-file.html}
 }
 \author{
 Thierry Gosselin \email{thierrygosselin@icloud.com}

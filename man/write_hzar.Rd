@@ -2,87 +2,56 @@
 % Please edit documentation in R/write_hzar.R
 \name{write_hzar}
 \alias{write_hzar}
-\title{Write an HZAR file}
+\title{Write HZAR}
 \usage{
 write_hzar(
   data,
-  distances = NULL,
+  distances,
   filename = NULL,
-  parallel.core = parallel::detectCores() - 1
+  strata = NULL,
+  path.folder = getwd(),
+  chunk.size = 32L,
+  overwrite = FALSE,
+  verbose = TRUE
 )
 }
 \arguments{
-\item{data}{A tidy data frame object in the global environment or
-a tidy data frame in wide or long format in the working directory.
-\emph{How to get a tidy data frame ?}
-Look into \pkg{genometranslator} \code{\link{tidy_genome}}.}
+\item{data}{Open SeqArray GDS or GDS path.}
 
-\item{distances}{(optional) A file with 2 columns, \code{POP_ID} and
-the distance information per populations.
-With default: \code{distances = NULL}, the column is left empty.
-Default: \code{distances = NULL}.}
+\item{distances}{Table or TSV containing STRATA and Distance (finite numeric).}
 
-\item{filename}{(optional) The file name prefix for the HZAR file
-written to the working directory. With default: \code{filename = NULL},
-the date and time is appended to \code{radiator_hzar_}.
-Default: \code{filename = NULL}.}
+\item{filename}{Output basename.}
 
-\item{parallel.core}{Default: \code{parallel.core = parallel::detectCores() - 1}.}
+\item{strata}{Sample metadata with INDIVIDUALS and STRATA.}
+
+\item{path.folder}{Output directory.}
+
+\item{chunk.size}{Samples per read block.}
+
+\item{overwrite}{Replace existing files.}
+
+\item{verbose}{Display progress messages.}
 }
 \value{
-A HZAR file is written in the working directory.
+A table with Population, Distance, and paired L*.freq/L*.n columns.
+Export paths are in the export.files attribute.
 }
 \description{
-Write a HZAR file (Derryberry et al. 2013), from a tidy data frame.
-Used internally in
-\href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
-and might be of interest for users.
+Export ALT allele frequencies and called diploid sample sizes.
 }
-\section{Data filtering}{
-
-This writer does not silently filter markers or individuals. It may validate
-requirements imposed by the destination format and stop with an informative
-error when the input is unsuitable. It is the user's responsibility to
-filter and quality-control the data appropriately for the intended analysis
-before generating the output. Use
-\href{https://thierrygosselin.github.io/radr/}{\pkg{radr}} or another
-suitable workflow when filtering is required.
+\details{
+Biallelic diploid data only. Frequencies are calculated from current
+called genotypes, not historical metrics. Entirely missing population/locus
+cells have NA frequency and sample size zero. Distances are matched by label,
+not row order. No missing distances are invented. GDS filters are restored.
 }
-
-\section{Dependencies}{
-
-Required package dependencies are declared in \code{DESCRIPTION} and are
-installed with \pkg{genometranslator}. Any additional dependency needed only
-for this format or option is identified in this help page. Use
-\code{genometranslator_dependencies()} to inspect the availability of core
-packages, optional packages, and external executables.
-}
-
 \examples{
 \dontrun{
-# The simplest form of the function:
-hzar.data <- genometranslator::write_hzar(data = tidydata)
-
-
-# Using genepop dataset, nancycats, from adegenet
-# require(adegenet)
-nancycats <- system.file("files/nancycats.gen", package = "adegenet")
-
-
-# using genome_translator:
-nanycats.hzar <- genometranslator::genome_translator(data = nancycats, output = "hzar")
-
-
-# using the separate modules:
-# tidy the genepop file then pipe the result in write_hzar
-nanycats.hzar <- genometranslator::read_genepop(data = nancycats) \%>\%
-    genometranslator::write_hzar(data = .)
+write_hzar("study.gds", distances = "distances.tsv", strata = "samples.tsv")
 }
 }
-\references{
-Derryberry EP, Derryberry GE, Maley JM, Brumfield RT.
-hzar: hybrid zone analysis using an R software package.
-Molecular Ecology Resources. 2013;14: 652-663. doi:10.1111/1755-0998.12209
+\seealso{
+\href{https://cran.r-project.org/package=hzar}{HZAR}
 }
 \author{
 Thierry Gosselin \email{thierrygosselin@icloud.com}

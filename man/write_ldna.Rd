@@ -2,86 +2,55 @@
 % Please edit documentation in R/write_ldna.R
 \name{write_ldna}
 \alias{write_ldna}
-\title{Write an LDna object}
+\title{Write LDna}
 \usage{
 write_ldna(
   data,
   filename = NULL,
-  parallel.core = parallel::detectCores() - 1,
-  ...
+  parallel.core = 1L,
+  path.folder = getwd(),
+  overwrite = FALSE,
+  verbose = TRUE,
+  max.markers = 10000L
 )
 }
 \arguments{
-\item{data}{A tidy data frame object in the global environment or
-a tidy data frame in wide or long format in the working directory.
-\emph{How to get a tidy data frame ?}
-Look into \pkg{genometranslator} \code{\link{tidy_genome}}.
-\strong{The genotypes are biallelic.}}
+\item{data}{Open SeqArray GDS or GDS path. Active whitelists are respected.}
 
-\item{filename}{(optional) The file name of the LDna lower matrix file.
-Radiator will append \code{.ldna.rds} to the filename.
-If filename chosen is already present in the
-working directory, the default \code{radiator_datetime.ldna.rds} is chosen.
-With default, \code{filename = NULL}, no file is generated, only an object in
-the Global Environment.
-To read the data back into R, use readRDS("filename.ldna.rds").
-Default: \code{filename = NULL}.}
+\item{filename}{Optional output basename; use path.folder for the directory.}
 
-\item{parallel.core}{Default: \code{parallel.core = parallel::detectCores() - 1}.}
+\item{parallel.core}{Number of LD calculation threads.}
 
-\item{...}{(optional) To pass further argument for fine-tuning the
-function (see details).}
+\item{path.folder}{Output directory.}
+
+\item{overwrite}{Allow replacement of existing output files.}
+
+\item{verbose}{Display progress messages.}
+
+\item{max.markers}{Maximum number of loci allowed in the dense LD matrix.}
+}
+\value{
+Export paths and mappings, or the target object as described above.
 }
 \description{
-Write a \href{https://github.com/petrikemppainen/LDna}{LDna}
-object from a biallelic tidy data frame.
-Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
-and might be of interest for users.
+Computes SNPRelate gametic r-squared and returns the lower triangle (NA diagonal and upper triangle). Memory is quadratic in marker count. max.markers prevents unexpectedly large allocation. Requires SNPRelate.
 }
 \details{
-The function requires \href{https://github.com/zhengxwen/SNPRelate}{SNPRelate}
-to prepare the data for LDna.
-
-To install SNPRelate:
-install.packages("BiocManager")
-BiocManager::install("SNPRelate")
-
-To install LDna:
-devtools::install_github("petrikemppainen/LDna")
+GDS selections are restored, including on errors. Partial diploid
+calls are rejected by allele-based conversions. No implicit biological
+filtering or imputation is performed. Safe locus/sample IDs have mapping
+tables. In-memory matrices must fit in RAM; block reads limit temporary memory.
 }
-\section{Dependencies}{
-
-Required package dependencies are declared in DESCRIPTION and installed
-with genometranslator. Run \code{genometranslator_dependencies()} to inspect
-core packages, optional packages, and external executables.
-
-This writer uses the optional Bioconductor package
-\href{https://bioconductor.org/packages/SNPRelate}{\pkg{SNPRelate}} to
-calculate the LD matrix. It writes data for LDna; it does not install or run
-the separate LDna software.
+\examples{
+\dontrun{
+write_ldna("study.gds", filename = "study")
 }
-
-\section{Data filtering}{
-
-This writer does not silently filter markers or individuals. It may validate
-requirements imposed by the destination format and stop with an informative
-error when the input is unsuitable. It is the user's responsibility to
-filter and quality-control the data appropriately for the intended analysis
-before generating the output. Use
-\href{https://thierrygosselin.github.io/radr/}{\pkg{radr}} or another
-suitable workflow when filtering is required.
 }
-
 \references{
 Kemppainen P, Knight CG, Sarma DK et al. (2015)
 Linkage disequilibrium network analysis (LDna) gives a global view of
 chromosomal inversions, local adaptation and geographic structure.
 Molecular Ecology Resources, 15, 1031-1045.
-
-Zheng X, Levine D, Shen J, Gogarten SM, Laurie C, Weir BS.
-(2012) A high-performance computing toolset for relatedness and principal component
-analysis of SNP data. Bioinformatics. 28: 3326-3328.
-doi:10.1093/bioinformatics/bts606
 }
 \author{
 Thierry Gosselin \email{thierrygosselin@icloud.com}

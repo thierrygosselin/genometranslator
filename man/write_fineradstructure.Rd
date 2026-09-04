@@ -2,78 +2,57 @@
 % Please edit documentation in R/write_fineradstructure.R
 \name{write_fineradstructure}
 \alias{write_fineradstructure}
-\title{Write a fineRADstructure file}
+\title{Write fineRADstructure}
 \usage{
-write_fineradstructure(data, strata = NULL, filename = NULL)
+write_fineradstructure(
+  data,
+  strata = NULL,
+  filename = NULL,
+  path.folder = getwd(),
+  chunk.size = 32L,
+  overwrite = FALSE,
+  verbose = TRUE
+)
 }
 \arguments{
-\item{data}{A tidy data frame object in the global environment or
-a tidy data frame in wide or long format in the working directory.
-\emph{How to get a tidy data frame ?}
-Look into \pkg{genometranslator} \code{\link{tidy_genome}}.}
+\item{data}{Open SeqArray GDS or GDS path.}
 
-\item{strata}{(path or object) The strata file or object.
-Additional documentation is available in \code{\link{read_strata}}.
-Use that function to whitelist/blacklist populations/individuals.
-Option to set \code{pop.levels/pop.labels} is also available.
-Default: \code{strata = NULL}.}
+\item{strata}{Reserved sample metadata; not needed for RADpainter input.}
 
-\item{filename}{(optional) The file name prefix for the fineRADstructure file
-written to the working directory. With default: \code{filename = NULL},
-the date and time is appended to \code{radiator_fineradstructure_}.
-Default: \code{filename = NULL}.}
+\item{filename}{Output basename.}
+
+\item{path.folder}{Output directory.}
+
+\item{chunk.size}{Samples per read block.}
+
+\item{overwrite}{Replace existing files.}
+
+\item{verbose}{Display progress messages.}
 }
 \value{
-A fineRADstructure file is written in the working directory.
-An object is also returned in the global environment.
+A list containing files, samples and loci.
 }
 \description{
-Write a \href{https://github.com/millanek/fineRADstructure}{fineRADstructure}
-file from a tidy data frame.
-Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
-and might be of interest for users.
+Write RADpainter input from locus-level nucleotide haplotypes.
 }
 \details{
-fineRADstructure requires special formating for populations,
-it needs to be ONLY LETTERS, not numbers. This information is then merged
-with the sample id (converted to integers). radiator will generate a
-dictionary file.
+Each GDS variant must already represent one complete locus haplotype
+with nucleotide sequences as alleles. Multiple SNP records sharing a LOCUS
+are rejected: concatenating unphased SNPs would invent haplotypes.
+Equal-length A/C/G/T/N sequences are required within each locus.
+Two alleles are separated by a slash; missing calls are empty fields.
+Sample IDs are safe S identifiers with an original-ID mapping.
+No biological filtering is performed. GDS selections are restored.
 }
-\section{Life cycle}{
-
-
-It become increasingly difficult for me to follow all the different naming
-schemes researcher uses, if they're is any strategy... Consequently, I have
-abandoned the idea of formating with letters the populations
-to generate the fineRADstrucure file. If you get an error see the
-the details section.
+\examples{
+\dontrun{
+write_fineradstructure("haplotypes.gds", filename = "study")
 }
-
-\section{Data filtering}{
-
-This writer does not silently filter markers or individuals. It may validate
-requirements imposed by the destination format and stop with an informative
-error when the input is unsuitable. It is the user's responsibility to
-filter and quality-control the data appropriately for the intended analysis
-before generating the output. Use
-\href{https://thierrygosselin.github.io/radr/}{\pkg{radr}} or another
-suitable workflow when filtering is required.
 }
-
-\section{Dependencies}{
-
-Required package dependencies are declared in \code{DESCRIPTION} and are
-installed with \pkg{genometranslator}. Any additional dependency needed only
-for this format or option is identified in this help page. Use
-\code{genometranslator_dependencies()} to inspect the availability of core
-packages, optional packages, and external executables.
-}
-
 \references{
-Malinsky, M., Trucchi, E., Lawson, D., Falush, D. (2018).
-RADpainter and fineRADstructure: population inference from RADseq data.
-Mol. Biol. Evol.  35(5), 1284-1290.
-https://dx.doi.org/10.1093/molbev/msy023
+Malinsky M, Trucchi E, Lawson DJ, Falush D (2018).
+RADpainter and fineRADstructure: Population inference from RADseq data.
+Molecular Biology and Evolution 35:1284-1290. \doi{10.1093/molbev/msy023}.
 }
 \seealso{
 \href{https://github.com/millanek/fineRADstructure}{fineRADstructure}

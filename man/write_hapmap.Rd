@@ -2,49 +2,47 @@
 % Please edit documentation in R/write_hapmap.R
 \name{write_hapmap}
 \alias{write_hapmap}
-\title{Write a HapMap file}
+\title{Write HapMap}
 \usage{
-write_hapmap(data, filename = NULL)
+write_hapmap(
+  data,
+  filename = NULL,
+  path.folder = getwd(),
+  chunk.size = 32L,
+  overwrite = FALSE,
+  verbose = TRUE
+)
 }
 \arguments{
-\item{data}{A tidy data frame object in the global environment or
-a tidy data frame in wide or long format in the working directory.
+\item{data}{Open SeqArray GDS or GDS path. Active whitelists are respected.}
 
-The data requires nucleotide \code{A, C, G, T} information for the genotypes.
+\item{filename}{Optional output basename; use path.folder for the directory.}
 
-\emph{How to get a tidy data frame ?}
-Look into \pkg{genometranslator} \code{\link{tidy_genome}}.}
+\item{path.folder}{Output directory.}
 
-\item{filename}{(optional) The file name prefix for the hapmap file
-written to the working directory. With default: \code{filename = NULL},
-the date and time is appended to \code{radiator_hapmap}.
-Default: \code{filename = NULL}.}
+\item{chunk.size}{Number of samples per GDS read block.}
+
+\item{overwrite}{Allow replacement of existing output files.}
+
+\item{verbose}{Display progress messages.}
+}
+\value{
+Export paths and mappings, or the target object as described above.
 }
 \description{
-Write a \href{https://www.ncbi.nlm.nih.gov/variation/news/NCBI_retiring_HapMap/}{HapMap file} from a tidy data frame.
-Used internally in \href{https://github.com/thierrygosselin/genometranslator}{genometranslator}
-and might be of interest for users.
+Writes the eleven HapMap metadata columns followed by diploid nucleotide calls (NN missing). Biallelic A/C/G/T SNPs with mapped coordinates are required; no coordinates are invented.
 }
-\section{Data filtering}{
-
-This writer does not silently filter markers or individuals. It may validate
-requirements imposed by the destination format and stop with an informative
-error when the input is unsuitable. It is the user's responsibility to
-filter and quality-control the data appropriately for the intended analysis
-before generating the output. Use
-\href{https://thierrygosselin.github.io/radr/}{\pkg{radr}} or another
-suitable workflow when filtering is required.
+\details{
+GDS selections are restored, including on errors. Partial diploid
+calls are rejected by allele-based conversions. No implicit biological
+filtering or imputation is performed. Safe locus/sample IDs have mapping
+tables. In-memory matrices must fit in RAM; block reads limit temporary memory.
 }
-
-\section{Dependencies}{
-
-Required package dependencies are declared in \code{DESCRIPTION} and are
-installed with \pkg{genometranslator}. Any additional dependency needed only
-for this format or option is identified in this help page. Use
-\code{genometranslator_dependencies()} to inspect the availability of core
-packages, optional packages, and external executables.
+\examples{
+\dontrun{
+write_hapmap("study.gds", filename = "study")
 }
-
+}
 \author{
 Thierry Gosselin \email{thierrygosselin@icloud.com}
 }

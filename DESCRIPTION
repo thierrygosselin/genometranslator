@@ -53,12 +53,16 @@ Imports:
     withr
 Suggests:
     adegenet,
+    gbasics (>= 1.2),
+    kinference,
     fst (>= 0.9.8),
     knitr,
     rmarkdown,
     SNPRelate,
     strataG,
     testthat (>= 3.0.0)
+Additional_repositories: https://markbravington.r-universe.dev,
+    https://closekin.r-universe.dev
 Config/testthat/edition: 3
 VignetteBuilder: knitr
 Encoding: UTF-8
