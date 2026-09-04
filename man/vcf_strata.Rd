@@ -13,7 +13,7 @@ vcf_strata(data, strata, filename = NULL)
 with header:
 \code{INDIVIDUALS} and \code{STRATA}.
 The \code{STRATA} and any other columns can be any hierarchical grouping.
-To create a strata file see \code{\link{individuals2strata}}.}
+Supply a sample metadata table as described in \code{\link[=read_strata]{read_strata()}}.}
 
 \item{filename}{(optional) The file name for the modifed VCF,
 written to the working directory. Default: \code{filename = NULL} will make a

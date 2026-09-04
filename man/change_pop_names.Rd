@@ -35,8 +35,8 @@ reorder the levels.
 }
 \seealso{
 \code{\link{read_strata}}, \code{\link{summary_strata}},
-\code{\link{individuals2strata}},
-\code{\link{join_strata}}, \code{\link{generate_strata}}
+
+\code{\link{join_strata}}
 }
 \author{
 Thierry Gosselin \email{thierrygosselin@icloud.com}

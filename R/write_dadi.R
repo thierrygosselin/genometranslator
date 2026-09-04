@@ -1,8 +1,7 @@
 #' Write a dadi spectrum
 #'
 #' @description Build a joint site-frequency spectrum from active diploid GDS
-#' calls and write a native dadi `.fs` file. Replaces the legacy tidy-data SNP
-#' table writer; the old FASTA and sumstats arguments are no longer used.
+#' calls and write a native dadi `.fs` file.
 #' @inheritParams write_fastsimcoal
 #' @param filename Output basename without the `.fs` suffix.
 #' @param mask.corners Mask the all-ancestral and all-derived cells (default

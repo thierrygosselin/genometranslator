@@ -24,6 +24,13 @@
 #' VCF-specific clean-ups.
 #'
 #' For users who want a fast and robust VCF-to-GDS import.
+#' @section Conversion safeguards:
+#' Sample-bearing records must contain a leading GT field. Valid VCF records
+#' without GT are rejected before import: this genotype-GDS route cannot safely
+#' represent them. Retain the original file; add explicitly missing GT calls in
+#' a separate copy only with known sample ploidy, or call genotypes upstream.
+#' Chromosome names retain their prefixes and valid FORMAT cardinalities are
+#' preserved. Reimport affected older GDS files from the original VCF.
 #'
 #'
 #' @param data (character)
@@ -228,6 +235,7 @@ read_vcf <- function(
   if (missing(data)) {
     rlang::abort("vcf file missing")
   }
+  .validate_vcf_gt_records(data)
 
   # Function call and dotslist ------------------------------------------------
   rad.dots <- genometranslator_dots(
@@ -428,6 +436,7 @@ read_vcf <- function(
       out.fn         = filename,
       parallel       = parallel.temp,
       storage.option = "ZIP_RA",
+      ignore.chr.prefix = "",
       verbose        = FALSE,
       header         = check.header,
       info.import    = markers.info,        # INFO fields (NULL = all)
@@ -465,6 +474,7 @@ read_vcf <- function(
       out.fn         = filename,
       parallel       = FALSE,
       storage.option = "ZIP_RA",
+      ignore.chr.prefix = "",
       verbose        = FALSE,
       header         = check.header,
       info.import    = markers.info,
@@ -1560,12 +1570,8 @@ check_header_source_vcf <- function(
   # read VCF header
   check.header <- SeqArray::seqVCF_Header(vcf.fn = vcf)
 
-  # generic FORMAT fixes (freebayes/samtools/Stacks inconsistencies)
-  problematic.id <- c("AD","AO","QA","GL","CATG","RO","QR","MIN_DP","PL","DPR")
-  problematic.id <- purrr::keep(problematic.id, problematic.id %in% check.header$format$ID)
-  for (p in problematic.id) {
-    check.header$format[check.header$format$ID == p, "Number"] <- "."
-  }
+  # Preserve declared FORMAT cardinalities (including R and G). Do not
+  # weaken valid headers merely because some callers have emitted bad ones.
 
   # DArT / Stacks GT type fix
   probl.dart <- check.header$format[check.header$format$ID == "GT", "Type"] == "Integer"
@@ -2804,7 +2810,7 @@ filter_haplotype_format <- function(
 #' with header:
 #' \code{INDIVIDUALS} and \code{STRATA}.
 #' The \code{STRATA} and any other columns can be any hierarchical grouping.
-#' To create a strata file see \code{\link{individuals2strata}}.
+#' Supply a sample metadata table as described in [read_strata()].
 
 #' @param filename (optional) The file name for the modifed VCF,
 #' written to the working directory. Default: \code{filename = NULL} will make a

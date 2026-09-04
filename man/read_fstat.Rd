@@ -13,7 +13,7 @@ one-column data frame containing its lines.}
 \item{strata}{(optional) A tab delimited file with 2 columns. Header:
 \code{INDIVIDUALS} and \code{STRATA}.
 The \code{STRATA} column can be any hierarchical grouping.
-To create a strata file see \code{\link{individuals2strata}}.
+Supply a sample metadata table as described in \code{\link[=read_strata]{read_strata()}}.
 Default: \code{strata = NULL}.}
 
 \item{tidy}{(optional, logical) With \code{tidy = FALSE},

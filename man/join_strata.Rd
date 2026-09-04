@@ -40,8 +40,7 @@ data <- genometranslator::join_strata(
 }
 \seealso{
 \code{\link{read_strata}}, \code{\link{summary_strata}},
-\code{\link{individuals2strata}}, \code{\link{change_pop_names}},
-\code{\link{generate_strata}}
+\code{\link{change_pop_names}}
 }
 \author{
 Thierry Gosselin \email{thierrygosselin@icloud.com}

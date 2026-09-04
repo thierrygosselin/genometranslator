@@ -12,6 +12,10 @@ navbar:
     href: articles/using_genometranslator.html
   - text: Reference
     href: reference/index.html
+  - text: Format policy
+    href: articles/unsupported_formats.html
+  - text: Converters
+    href: articles/converter_comparison.html
   - text: News
     href: news/index.html
   right:
@@ -36,8 +40,6 @@ reference:
   contents:
   - read_strata
   - summary_strata
-  - individuals2strata
-  - generate_strata
   - join_strata
   - change_pop_names
   - clean_ind_names
@@ -82,6 +84,7 @@ reference:
   - parse_gds_metadata
   - genome_parameters
   - list_filters
+  - import_filter_history
   - reset_filters
 
 - title: DArT utilities

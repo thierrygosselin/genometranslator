@@ -7,15 +7,17 @@
 state and is being actively
 developed.](http://www.repostatus.org/badges/latest/active.svg)](http://www.repostatus.org/#active)
 [![packageversion](https://img.shields.io/badge/Package%20version-0.0.0.9000-orange.svg)](commits/master)
-[![Last-changedate](https://img.shields.io/badge/last%20change-2026--09--03-brightgreen.svg)](/commits/master)
+[![Last-changedate](https://img.shields.io/badge/last%20change-2026--09--04-brightgreen.svg)](/commits/master)
 <!-- badges: end -->
 
 `genometranslator` reads, standardizes, and writes individual genomic
-data. The easiest interface is `read_genome()` and `write_genome()`; use
-a format-specific `read_*()` or `write_*()` function when more control
-is needed. Large genomic datasets remain in a file-backed GDS rather
-than being expanded into an R data frame unless that conversion is
-requested explicitly.
+data. The easiest interface is `read_genome()` and `write_genome()`. Use
+the format-specific `read_*()` or `write_*()` functions when more
+control is needed.
+
+The genomic datasets remain in a file-backed GDS rather than being
+expanded into an R data frame unless that conversion is requested
+explicitly.
 
 ## Quick start
 
@@ -36,7 +38,9 @@ return an open SeqArray GDS object:
 genome <- genometranslator::read_vcf(
   data = "individuals.vcf.gz",
   strata = "strata.tsv",
-  filename = "individuals"
+  vcf.stats = TRUE,
+  parallel.core = 20L,
+  all.sites = TRUE
 )
 ```
 
@@ -45,11 +49,6 @@ Use `tidy_genome()` only when an in-memory table is genuinely needed:
 ``` r
 genotypes <- genometranslator::tidy_genome(data = genome)
 ```
-
-The former `tidy_vcf()` wrapper has been removed. Its import
-responsibilities belong to `read_genome()` and `read_vcf()`, while
-filtering belongs in `radr`. The historical implementation remains
-available in `radiator` for legacy workflows.
 
 ## Installation
 
@@ -79,20 +78,17 @@ Install only the packages needed by your workflow:
 install.packages("adegenet")
 ```
 
-See the documentation for the relevant `read_*` or `write_*` function
-for the exact dependency and data requirements of that format.
-
-VCF imports retain caller and workflow provenance in GDS metadata and
-preserve common structural-variant annotations when they are present.
-See the [get-started vignette](articles/using_genometranslator.html) for
-the current scope and the roadmap toward a dedicated structural-variant
-representation.
-
 Run the dependency diagnostic after installation:
 
 ``` r
 genometranslator::genometranslator_dependencies()
 ```
+
+See the documentation for the relevant `read_*` or `write_*` function
+for the exact dependency and data requirements of that format.
+
+More information in the [get-started
+vignette](articles/using_genometranslator.html).
 
 ### Optional bcftools executable
 
@@ -166,9 +162,37 @@ or DOI is available:
 > Gosselin, T. (2026). *genometranslator: Read, standardize and
 > translate genomic data*. R package version 0.0.0.9000.
 > <https://github.com/thierrygosselin/genometranslator>. Accessed
-> 2026-09-03.
+> 2026-09-04.
 
 ## Website and support
+
+### Choosing a converter
+
+Read [Choosing a genomic data
+converter](https://thierrygosselin.github.io/genometranslator/articles/converter_comparison.html)
+for tested conversion paths, known limitations, and genometranslator’s
+own safeguards. Format support alone does not guarantee faithful
+conversion.
+
+### Requesting additional genomic formats
+
+Need a genomic format that genometranslator does not support? Submit a
+[format request on
+GitHub](https://github.com/thierrygosselin/genometranslator/issues).
+Include the format specification, the intended workflow, and a small
+synthetic or non-sensitive example. Requests are evaluated for
+scientific usefulness, reliable translation, and maintenance
+requirements; support is not guaranteed.
+
+Dedicated **fastSTRUCTURE support will not be implemented**. See
+[Unsupported formats and software-specific
+exports](https://thierrygosselin.github.io/genometranslator/articles/unsupported_formats.html)
+for the code-audit findings behind this decision. This vignette records
+exclusions and their rationale as the package evolves. The
+fineRADstructure writer is also retired; a request may prompt
+reassessment of an updated implementation against the documented
+findings. The related writer is also retired; the same vignette
+documents the implementation concerns behind this support decision.
 
 Documentation and articles are available at
 <https://thierrygosselin.github.io/genometranslator/>.

@@ -29,6 +29,6 @@ genometranslator::summary_strata(strata)
 }
 \seealso{
 \code{\link{read_strata}},
-\code{\link{individuals2strata}}, \code{\link{change_pop_names}},
-\code{\link{join_strata}}, \code{\link{generate_strata}}
+\code{\link{change_pop_names}},
+\code{\link{join_strata}}
 }

@@ -1,0 +1,562 @@
+---
+title: "Unsupported formats and software-specific exports"
+author: "Thierry Gosselin"
+date: "2026-09-04"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Unsupported formats and software-specific exports}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+## related: writer retired
+
+**The dedicated `write_related()` writer is no longer supported.** Its source
+has been retained separately in the maintainer's deprecated collection. Users
+should choose a maintained relatedness workflow appropriate to their data;
+genometranslator no longer maintains this software-specific export.
+
+### Findings in the inspected implementation
+
+The supplied `related_1.0.tar.gz` archive was inspected on 4 September 2026.
+It matched the archive distributed in the
+[author's repository](https://github.com/timothyfrasier/related). The findings
+below concern that snapshot, not the age of the package or unverified issue
+reports. Source paths refer to files inside the archive.
+
+- **Incorrect inbreeding estimator labels.** With `allow.inbreeding = FALSE`,
+  `src/related.f90` writes the inbreeding estimates in the order
+  `LH, LR, L3, L2`, whereas `readrelatedoutput()` in `R/related.R` assigns
+  `L3, LH, LR, L2`. The same order mismatch affects the associated confidence
+  intervals. A controlled parser test reproduced the incorrect labels. This
+  finding concerns the inbreeding tables, not the separate pairwise-relatedness
+  table.
+- **Inconsistent individual identifiers across output tables.** The Fortran
+  output uses sample identifiers for inbreeding point estimates but numeric
+  row indices for their confidence intervals. Both are returned under
+  `ind.id`; joining them by this field without an explicit mapping is unsafe.
+- **Invalid upper bound for permutation P-values.** `grouprel()` in
+  `R/related.R` uses `(exceedances + 1) / iterations`, which can exceed one
+  (for example, 101/100). With this plus-one correction, the denominator
+  should also include the observed arrangement: `iterations + 1`.
+- **Fragile working-directory and intermediate-file handling.**
+  `coancestry()` changes the working directory without an `on.exit()` guard
+  that restores it on ordinary errors. It also uses fixed intermediate file
+  names. Errors can leave the R session in another directory, and overlapping
+  runs sharing a directory can interfere with one another.
+
+### Interpretation and scope
+
+These implementation concerns motivate retirement of the dedicated exporter;
+they do not establish that every relatedness estimator or published result is
+incorrect. The audit inspected the R/Fortran interface and used controlled
+parser tests, but did not independently validate every compiled estimator.
+The original paper describes useful estimator-comparison and simulation
+capabilities (Pew et al., 2015). Retiring an exporter is a maintenance decision,
+not a rejection of those statistical methods.
+
+The former writer's basic allele-pair layout matched the target reader.
+Nevertheless, the workflow transfers hard genotype calls rather than read
+depth or genotype likelihoods. The target reader limits each locus to 127
+observed alleles, and its group analyses infer groups from sample-name
+prefixes rather than a separate strata table. These are additional
+compatibility constraints, not evidence that the text format itself is invalid.
+
+### Reference
+
+Pew, J., Muir, P. H., Wang, J., & Frasier, T. R. (2015). related: an R package
+for analysing pairwise relatedness from codominant molecular markers.
+*Molecular Ecology Resources*, 15, 557–561.
+<https://doi.org/10.1111/1755-0998.12323>.
+
+## Scope and requests
+
+genometranslator does not aim to implement every genomic representation or
+maintain a dedicated exporter for every analysis program. A file format and
+the software consuming it are distinct: supporting PLINK BED, for example,
+does not imply endorsing every program that reads BED.
+
+Users can [request additional genomic formats on
+GitHub](https://github.com/thierrygosselin/genometranslator/issues).
+Please provide:
+
+- The official specification and the producing or consuming software.
+- The scientific workflow that needs the format.
+- A small synthetic or non-sensitive example, with expected interpretation.
+- The information that must survive translation, such as allele identity,
+  ploidy, missing calls, read depth, genotype likelihoods, or sample metadata.
+
+Requests are assessed for scientific usefulness, faithful translation, testable
+behaviour, and maintenance requirements. A request does not guarantee inclusion.
+This document is a record of deliberate exclusions, rather than a catalogue of
+every format not currently supported. Additional decisions can be documented
+with their scope, evidence, limitations, and available alternatives.
+
+## fastSTRUCTURE: dedicated support excluded
+
+**Dedicated fastSTRUCTURE support will not be implemented in genometranslator.**
+The former software-specific exporter has been retired. General VCF and PLINK
+support remains available for other workflows and historical reproducibility.
+Neither exporting a file nor successfully running a program validates its
+statistical results.
+
+### What was reviewed
+
+On 4 September 2026, a focused audit examined a supplied source snapshot of
+[rajanil/fastStructure](https://github.com/rajanil/fastStructure), including
+`chooseK.py`, `parse_bed.pyx`, `parse_str.pyx`, `structure.py`,
+`fastStructure.pyx`, and `vars/utils.pyx`.
+
+The findings below come from source inspection and small reproductions of the
+relevant logic. The standalone log parser was executed unchanged; Cython parser
+and cross-validation conditions were checked with small Python reproductions.
+The complete compiled inference program was not run or statistically
+benchmarked. These observations apply to the inspected snapshot, not
+automatically to independently patched forks or future revisions.
+
+### Findings and their conditions
+
+- **An interrupted run can make the K-selection script report the wrong K.**
+  In [`chooseK.py`](https://github.com/rajanil/fastStructure/blob/master/chooseK.py),
+  `parse_logs()` omits files without a final marginal-likelihood value. The
+  corresponding K entries are not removed before indexing the likelihood
+  maximum. With an incomplete K = 1 log, a K = 2 score of -10, and a K = 3
+  score of -5, the reproduction reported K = 2 instead of K = 3. This finding
+  concerns incomplete log collections; it does not establish an error when
+  all logs are complete.
+
+- **Cross-validation can retry without any possibility of success.**
+  In [`fastStructure.pyx`](https://github.com/rajanil/fastStructure/blob/master/fastStructure.pyx),
+  `CV()` repeatedly samples masks until every retained locus has a genotype
+  coded 1 or 2. A locus containing only genotype 0 and missing calls cannot
+  satisfy that condition under any mask. The retry loop has no attempt limit.
+  An exhaustive four-sample check rejected all 16 combinations of observed
+  zeros and masked entries. This applies when cross-validation is enabled and
+  such a locus reaches that code; it is not a claim that every CV run hangs.
+
+- **BED storage mode is read but not validated.**
+  [`parse_bed.pyx`](https://github.com/rajanil/fastStructure/blob/master/parse_bed.pyx)
+  reads the third header byte into `checkC` but checks only the first two
+  bytes before decoding as SNP-major data. Individual-major BED is not
+  explicitly rejected. For a four-sample, four-locus fixture, applying the
+  supplied decoding logic to individual-major payload bytes produced a
+  transposed genotype matrix without a size mismatch. Correct SNP-major input
+  avoids this particular failure; the problem is missing validation of an
+  incompatible storage mode.
+
+- **The text parser does not safely handle all-missing or multiallelic loci.**
+  [`parse_str.pyx`](https://github.com/rajanil/fastStructure/blob/master/parse_str.pyx)
+  removes the missing-allele code `-9`, then accesses `alleles[0]`.
+  An entirely missing locus therefore raises `IndexError`. If more than two
+  alleles occur, the parser builds its genotype map from only the first two;
+  calls involving additional alleles are converted to missing rather than
+  triggering an explicit unsupported-input error. Biallelic, non-empty loci
+  avoid these cases. Multiallelic input is outside the intended model, but it
+  should be rejected clearly rather than silently recoded.
+
+- **Main convergence loops lack bounded-failure safeguards.**
+  The main inference and CV optimisation loops in `fastStructure.pyx` have
+  no maximum iteration count and no explicit finite-value check on their
+  convergence difference. A NaN difference makes the loop comparison false;
+  failure to converge can leave a loop running indefinitely.
+  [`structure.py`](https://github.com/rajanil/fastStructure/blob/master/structure.py)
+  also suppresses divide-by-zero and invalid-value warnings. These are
+  source-level failure risks, not evidence that a particular published
+  analysis produced invalid estimates.
+
+- **The supplied entry point requires a legacy Python environment.**
+  `structure.py` contains Python 2 print syntax and `dict.has_key()`.
+  A Python 3 syntax check fails before execution. This is a compatibility
+  limitation, not evidence that the statistical model is incorrect.
+
+### Why this affects the support decision
+
+Together, these findings create avoidable input-validation, failure-reporting,
+and reproducibility burdens for a dedicated integration. Some can be prevented
+through careful upstream preparation, but a file exporter cannot repair an
+inference program's convergence or K-selection behaviour.
+
+The decision is not based on the number of GitHub issues, users' unverified
+reports, or an assumed last-maintenance date. Nor does it claim that all
+fastSTRUCTURE results are wrong. fastSTRUCTURE is a published variational
+inference method; the narrower decision here is not to maintain or promote a
+dedicated integration with the inspected implementation.
+
+For new workflows, retain a well-documented VCF/BCF or GDS source and select
+downstream software according to the study design and the uncertainty retained
+in the data. Converting hard calls to another format does not restore genotype
+likelihoods that were discarded earlier. General PLINK export remains useful
+where a separately evaluated downstream method requires it.
+
+## fineRADstructure: writer retired, subject to reassessment
+
+**The dedicated fineRADstructure writer is no longer supported.** Its source
+has been retained by the maintainer outside the package in a deprecated-code
+archive. Users may request reconsideration through GitHub. A request will
+prompt review of the current upstream implementation and the archived writer;
+it is not a commitment to restore support.
+
+This is a support-policy decision, not a claim that fineRADstructure and
+fastSTRUCTURE are the same method or have the same defects. fineRADstructure
+combines RADpainter's locus-haplotype coancestry calculation with fineSTRUCTURE
+clustering (Malinsky et al., 2018).
+
+### Audit scope and positive control
+
+The supplied fineRADstructure snapshot was inspected on 4 September 2026.
+Its RADpainter source identifies itself as version `0.3.3 r111`.
+RADpainter was compiled directly from that source with the available C++
+compiler. A synthetic control with 300 loci and five samples completed and
+produced a finite coancestry matrix.
+
+That control shows the painting executable can work on suitable input; it is
+not a statistical validation or a complete test of the supplied build system.
+The fineSTRUCTURE MCMC executable and every possible input path were not
+audited. The findings below were reproduced in the compiled RADpainter or,
+for the R utility, by executing the supplied function on a small data frame.
+
+### Highest-priority concerns
+
+- **The experimental VCF converter silently ignores a phase-preservation
+  option.** In
+  [`hapsFromVCF.cpp`](https://github.com/millanek/fineRADstructure/blob/master/hapsFromVCF.cpp),
+  `-H p` is advertised as using phase information from the VCF and is accepted
+  by the option parser, but the option switch has no `case 'H'`. The default
+  heterozygote treatment therefore remains active. In a phased two-SNP
+  example, the expected `AG/CT` haplotypes became `AN/CN`; the command
+  returned exit status zero. This loses supplied haplotype information while
+  appearing to honour the requested mode. It concerns the bundled experimental
+  converter, not direct input of correctly prepared locus haplotypes.
+
+- **A successful exit can accompany invalid coancestry output.** In
+  [`paintSql.cpp`](https://github.com/millanek/fineRADstructure/blob/master/paintSql.cpp),
+  the missingness rescaling divides by
+  `1 - missingnessMatrix[i][j] / tagsRead`. A completely missing sample
+  creates zero denominators. Adding such a sample to the test data produced
+  non-finite matrix entries despite exit status zero. The program warns about
+  very high missingness but does not reject this case before producing output.
+  Completely unobserved samples should be excluded, and downstream matrices
+  must be checked for finite values. This test does not demonstrate failure
+  at ordinary missingness levels.
+
+- **The supplied LD-reordering utility has an incorrectly shaped accumulator.**
+  In
+  [`sampleLD.R`](https://github.com/millanek/fineRADstructure/blob/master/sampleLD.R),
+  `snpcor` inherits the locus-by-sample dimensions of the input, while
+  `t(tmat) %*% tmat` is a locus-by-locus matrix. On a four-locus,
+  three-sample data frame, the function returned a 4-by-3 object instead of
+  the required 4-by-4 similarity matrix. It should not be relied upon for
+  LD-based ordering without correction and tests. This matters because the
+  author's guidance links appropriate locus ordering to avoiding overconfident
+  clustering when loci are linked; it does not mean every ordering or
+  clustering produced by the software is wrong.
+
+### Additional command-line defect
+
+- **The documented long ploidy option rejects its value.**
+  `paintSql.cpp` declares `--ploidy` with `no_argument`, although its
+  help specifies `--ploidy=N`. The compiled command
+  `paint --ploidy=2` failed with an option error. Default diploid painting
+  worked in the control; this finding is a command-line interface defect,
+  not proof of a general diploid inference failure.
+
+### Why retire the writer, and what would justify reconsideration?
+
+The former genometranslator exporter bypassed the experimental VCF converter
+and did not concatenate unphased SNPs into invented haplotypes. That distinction
+is important: the converter defect was not a defect in every exported file.
+Nevertheless, the combination of silent information loss in a bundled tool,
+successful exits with non-finite results, and a defective recommended utility
+creates a downstream support and validation burden that the maintainer is not
+currently accepting.
+
+Reconsideration should include:
+
+- Reviewing the exact upstream revision and retesting each finding above.
+- Validating the archived writer against genuine multi-SNP locus haplotypes,
+  including allele identity, sample order, missing calls, and locus identity.
+- Rejecting unobserved samples and checking downstream matrices for finite
+  values; documenting insufficient-data conditions.
+- Establishing a tested locus-ordering workflow and testing sensitivity to
+  missingness, filtering, and plate or population confounding.
+- Testing the full export, painting, and clustering workflow rather than
+  treating a successful file write as validation.
+
+This decision does not rely on GitHub issue counts or unverified user reports.
+Upstream documentation records substantive historical fixes, including
+missing-data and allele-count corrections. Those improvements are acknowledged;
+the findings here apply to the supplied snapshot, not automatically to a
+subsequently corrected version. See the
+[author's documentation](https://www.milan-malinsky.org/fineradstructure)
+for input requirements, update notes, and warnings about systematic
+missingness and locus ordering.
+
+## Other Linkage Map software
+
+**Lep-MAP3 remains genometranslator's current dedicated linkage-mapping export
+target.** `write_lepmap3()` exports supported diploid biallelic SNPs with retained
+PL or GL and a validated pedigree. Synthetic exports were tested with
+ParentCall2. These are interoperability tests, not an independent validation
+of Lep-MAP3's inference or evidence that it is problem-free. Its supported
+pedigrees and assumptions must still match the study; it is not a replacement
+for every polyploid or experimental-cross method below.
+
+We are not adding dedicated writers for the alternatives reviewed here at
+present. The reasons are specific implementation concerns, workflow fit and
+maintenance burden—not software age, issue counts, or a claim that every
+published result is unreliable. Findings distinguish executed reproductions
+from source inspection and documented limitations.
+
+### OneMap and BatchMap: dedicated writers excluded
+
+**genometranslator will not implement dedicated OneMap or BatchMap writers.**
+This is a deliberate integration and maintenance decision, not a claim that
+these methods are obsolete or that all maps produced with them are incorrect.
+General VCF export remains available; exporting a valid VCF does not guarantee
+that a downstream reader uses its genotype likelihoods.
+
+#### Scope and maintenance context
+
+The supplied OneMap **3.2.6** and BatchMap **1.0.3.0** sources were inspected
+on 4 September 2026. The review focused on input conversion, genotype-error
+handling, probability orientation, and overlapping-batch control flow. Small
+R reproductions were run; the complete mapping algorithms were not statistically
+validated. Findings apply to these snapshots, not automatically to future
+revisions or patched forks.
+
+OneMap is maintained. Its
+[current maintainer README](https://github.com/Cristianetaniguti/onemap)
+states that updates since version 3.2.0 focus on accessibility and
+functionality. It recommends MAPpoly for several diploid SNP workflows,
+including large marker sets, while retaining OneMap for RILs and multiallelic
+or dominant markers. This is relevant context, not itself a software defect.
+OneMap also contains an adaptation of BatchMap's overlapping-batch approach;
+the implementations are not identical, but maintaining two dedicated export
+paths would serve substantially overlapping workflows.
+
+#### OneMap: reproduced concerns
+
+- **Named genotype-error matrices can be assigned to the wrong samples.**
+  In [`R/create_probs.R`](https://github.com/Cristianetaniguti/onemap/blob/main/R/create_probs.R),
+  sample and marker names are checked for membership, but the supplied error
+  matrix is not reordered to match the genotype matrix before flattening.
+  In a two-sample test, reversing named rows exchanged error rates 0.01 and
+  0.20 between samples without an error. Correctly ordered input was the
+  successful control. A writer could enforce ordering, but subsequent
+  reordering still requires protection at the point of use.
+- **Invalid error rates are not rejected by the tested helper.** A call to
+  `create_probs(..., global_error = 2)` returned negative emission values
+  rather than rejecting a rate outside the probability range. This is a
+  missing validation safeguard, not evidence of failure with valid rates.
+- **Probability orientation can be inconsistent across genotype classes.**
+  In the same function, a biallelic example with reversed homozygote coding
+  correctly exchanged the homozygote probability columns but did not exchange
+  the corresponding flanking probabilities for a heterozygote. With input
+  probabilities `(0.02, 0.80, 0.18)`, the heterozygote's four-state emission
+  vector remained `(0.02, 0.80, 0.80, 0.18)` instead of the consistently
+  reoriented `(0.18, 0.80, 0.80, 0.02)`. The code uses the position returned
+  by `which.max()` on a frequency table rather than its category label.
+  This finding concerns allele-state orientation, not the duplication of the
+  heterozygote emission across two inheritance states.
+- **A batch-removal branch can return an incorrect marker set.**
+  [`R/overlapping_batches.R`](https://github.com/Cristianetaniguti/onemap/blob/main/R/overlapping_batches.R)
+  compares marker indices with a vector of removed markers using `==`, which
+  recycles values, instead of membership matching. An isolated branch test
+  requesting removal of markers 2 and 5 from `1:6` returned an empty vector
+  rather than `1, 3, 4, 6`. The mapping result was stubbed to exercise this
+  branch; this was not a full linkage-map reproduction.
+
+#### Uncertainty handling and BatchMap limitations
+
+- **OneMap VCF import does not automatically propagate PL/GL into the HMM.**
+  Source inspection of
+  [`R/onemap_read_vcfR.R`](https://github.com/Cristianetaniguti/onemap/blob/main/R/onemap_read_vcfR.R)
+  shows that it initializes `create_probs(..., global_error = 10^-5)`.
+  OneMap supports additional error/probability inputs, but their use requires
+  an explicit, tested workflow. Merely including PL/GL in an exported VCF is
+  not sufficient. This is a workflow limitation, not evidence that OneMap
+  cannot model genotype uncertainty.
+- **The inspected BatchMap HMM uses a fixed error probability.**
+  [`src/hmm_out.cpp`](https://github.com/bschiffthaler/BatchMap/blob/master/src/hmm_out.cpp)
+  sets `error_prob = 0.00001`. Its ordinary hard-call input route therefore
+  does not preserve the per-genotype uncertainty available in a GDS. This is
+  a model/interface limitation, not a demonstrated numerical failure.
+- **Short sequences lack a usable batch-generation fallback in both packages.**
+  With ten markers and the default batch size of 50, the tested batch
+  generators returned an empty list with a warning. Batch dimensions must be
+  checked before mapping; the warning alone does not produce a valid batch.
+
+BatchMap's compiled-reader testing was blocked by a local compiler/header
+conflict. That environment failure is not counted as a BatchMap defect, and
+no successful compiled-reader or full BatchMap benchmark is claimed here.
+
+#### Why we are not adding these writers
+
+The value of a dedicated exporter would be a reliable end-to-end integration,
+not simply another text representation. These workflows would require
+cross-specific parental coding, exact sample/marker matching, tested
+allele-probability orientation, and safeguards around downstream batch handling.
+Some issues can be avoided during export, but an exporter cannot repair every
+subsequent mapping operation. The support burden, overlapping functionality,
+and uncertainty-handling constraints do not justify these integrations for
+genometranslator at present.
+
+The original OneMap, BatchMap, and newer error-aware GBS work remain relevant
+scientific contributions (Margarido et al., 2007; Schiffthaler et al., 2017;
+Taniguti et al., 2023). This decision is not based on GitHub issue counts or
+unverified user reports. The subsequent MAPpoly review is described below;
+the OneMap authors' recommendation was a reason to investigate it, not an
+automatic endorsement. Software choice must still match the cross design.
+
+### MAPpoly: VCF conversion concerns
+
+The supplied MAPpoly **0.4.2** source was inspected on 4 September 2026.
+Its VCF-parsing C++ helpers were compiled and exercised on small examples;
+the complete VCF reader and mapping HMM were not benchmarked end to end.
+MAPpoly supports diploid and even-ploidy autopolyploid mapping, including
+dosage and probability-based inputs (Mollinari & Garcia, 2019). The defects
+below concern the inspected VCF route, not every MAPpoly input or the HMM.
+
+- **PL values are converted using the wrong exponential base.** The compiled
+  [VCF parser](https://github.com/mmollina/MAPpoly/blob/main/src/read_mappoly_vcf.cpp)
+  uses `exp(-PL/10)` rather than `10^(-PL/10)`. For `PL = 0,10,20`, it returned
+  normalized values `(0.6652, 0.2447, 0.0900)` instead of
+  `(0.9009, 0.0901, 0.0090)`. This materially changes relative evidence for
+  the genotypes. Normalized likelihoods are not automatically posterior
+  probabilities; a prior must be specified to make that interpretation.
+- **Minimum-depth filtering compares against genotype dosage.** In the
+  [R VCF reader](https://github.com/mmollina/MAPpoly/blob/main/R/read_mappoly_vcf.R),
+  the assignment is `geno.dose[which(geno.dose < min.gt.depth)] = NA`.
+  An isolated reproduction with diploid dosages 0, 1 and 2, all with depth
+  20, masked every dosage at a depth threshold of 5. This is an execution
+  of the filtering expression, not a complete reader run.
+- **Partially missing genotypes can become called dosages.** The compiled
+  dosage helper returned 0 for `0/.` and 1 for `1/.`, while `./1` returned
+  the missing sentinel. Equivalent partial-missing information therefore
+  receives inconsistent treatment. A complete `0/1` control returned 1.
+- **Multiallelic calls are not safely represented by the dosage helper.**
+  The compiled helper returned dosage 0 for `0/2`: it counts allele-index
+  characters equal to `1` instead of rejecting this unsupported biallelic
+  representation. The R reader's probability-enabled path checks vector
+  cardinality, but that is not a substitute for explicit allele validation
+  on every input route. This reproduction tests the helper, not all later
+  filtering steps.
+- **Missing PL in the first sample can invalidate other samples' vectors.**
+  The compiled probability helper sets its output width from the first
+  sample. With first-sample PL missing and another sample carrying a valid
+  three-value PL vector, it produced two columns, assigned `(0.5, 0.5)` to
+  the first sample and `(-1, -1)` to the second. A biallelic diploid marker
+  requires three genotype states; this can also affect subsequent
+  cardinality-based marker filtering.
+- **FORMAT field positions are treated as constant across records.** The R
+  reader selects field positions globally. In a helper test with DP and PL
+  exchanged between records, applying that fixed DP index returned depth 30
+  instead of the actual 20. VCF permits record-specific FORMAT layouts.
+
+A dedicated native-format export might bypass this reader, but would require
+separate validation of the native reader, dosage orientation and uncertainty
+handling. We are not adding that integration now. These findings do not
+establish that maps constructed through other, correctly prepared inputs are
+incorrect, nor do they establish that Lep-MAP3 is superior for every cross.
+
+### polymapR: specialised scope and input safeguards
+
+The supplied polymapR **1.1.7** distributions were inspected on 4 September
+2026: one source distribution and two built R packages, not three different
+software versions. Small tests executed the source R helpers. The review did
+not validate the complete linkage estimators or every supported ploidy.
+polymapR provides F1 dosage-based linkage analysis and probabilistic workflows
+for polyploids (Bourke et al., 2018).
+
+- **Diploid support does not extend to the inspected probabilistic linkage
+  route.** In `R/exported_functions.R`, `linkage()` permits offspring ploidies
+  2, 3, 4 and 6, whereas `linkage.gp()` explicitly permits only 3, 4 and 6.
+  This is a scope limitation, not an implementation error. It limits the
+  value of a dedicated writer for our diploid uncertainty-preserving workflow.
+- **Duplicate-name repair does not operate on names.** In
+  `R/aiding_functions.R`, `test_dosage_matrix()` warns that duplicate marker
+  names are being removed but subsets using `duplicated(dosage_matrix)`.
+  A test with duplicate names and different genotype rows retained both
+  names despite that warning. Exporters and callers must enforce unique IDs
+  rather than relying on this repair.
+- **The probability-input validator does not check probability validity.**
+  `test_probgeno_df()` accepted a row containing `P0 = -1`, `P1 = 2` and
+  `maxP = 2`. The helper checks required metadata columns, but not all
+  numerical invariants. This demonstrates a missing input safeguard, not
+  that the complete inference workflow accepts or mishandles every such row.
+- **The polyRAD converter does not return all fields required downstream.**
+  A synthetic two-marker, two-sample test of `convert_polyRAD()` produced
+  dosage-probability columns, `maxgeno` and `maxP`, but no `geno` column;
+  the resulting table was rejected by `test_probgeno_df()`. An explicit
+  confidence-threshold step can supply `geno`, retaining uncertain calls as
+  missing. This is an additional preparation requirement that should be
+  documented, not resolved by silently inventing a threshold.
+
+Source files and release material are available through the
+[polymapR package page](https://cran.r-project.org/package=polymapR).
+The scope mismatch and additional validation requirements do not justify a
+dedicated integration for our current workflow. They are not a blanket
+rejection of polymapR for a suitable polyploid project.
+
+### Interpretation and possible reassessment
+
+We retain the original GDS and its uncertainty information, and concentrate
+dedicated linkage export support on the tested Lep-MAP3 interface. Future
+reassessment of another target would require a concrete study need, an exact
+upstream version, retesting of the relevant findings, and end-to-end checks of
+alleles, dosage, pedigree, sample order, missingness and uncertainty. A writer
+cannot recover uncertainty discarded upstream, and successful parsing alone
+does not validate a genetic map.
+
+## References
+
+Raj, A., Stephens, M., & Pritchard, J. K. (2014).
+fastSTRUCTURE: Variational inference of population structure in large SNP data
+sets. *Genetics*, *197*(2), 573–589.
+[https://doi.org/10.1534/genetics.114.164350](https://doi.org/10.1534/genetics.114.164350).
+
+Source implementation:
+[rajanil/fastStructure](https://github.com/rajanil/fastStructure).
+The audit above concerns the locally supplied snapshot reviewed on
+4 September 2026; links to the default branch may subsequently change.
+
+Malinsky, M., Trucchi, E., Lawson, D. J., & Falush, D. (2018).
+RADpainter and fineRADstructure: Population inference from RADseq data.
+*Molecular Biology and Evolution*, *35*(5), 1284–1290.
+[https://doi.org/10.1093/molbev/msy023](https://doi.org/10.1093/molbev/msy023).
+
+Source implementation:
+[millanek/fineRADstructure](https://github.com/millanek/fineRADstructure).
+Findings refer to the locally supplied snapshot reviewed on 4 September 2026.
+
+Margarido, G. R. A., Souza, A. P., & Garcia, A. A. F. (2007).
+OneMap: software for genetic mapping in outcrossing species.
+*Hereditas*, *144*(3), 78–79.
+<https://doi.org/10.1111/j.2007.0018-0661.02000.x>.
+
+Schiffthaler, B., Bernhardsson, C., Ingvarsson, P. K., & Street, N. R. (2017).
+BatchMap: A parallel implementation of the OneMap R package for fast computation
+of F1 linkage maps in outcrossing species. *PLOS ONE*, *12*(12), e0189256.
+<https://doi.org/10.1371/journal.pone.0189256>.
+
+Taniguti, C. H., Taniguti, L. M., Amadeu, R. R., Lau, J., de Siqueira Gesteira,
+G., Oliveira, T. de P., Ferreira, G. C., Pereira, G. da S., Byrne, D.,
+Mollinari, M., Riera-Lizarazu, O., & Garcia, A. A. F. (2023).
+Developing best practices for genotyping-by-sequencing analysis in the
+construction of linkage maps. *GigaScience*, *12*, giad092.
+<https://doi.org/10.1093/gigascience/giad092>.
+
+Mollinari, M., & Garcia, A. A. F. (2019). Linkage analysis and haplotype phasing
+in experimental autopolyploid populations with high ploidy level using hidden
+Markov models. *G3: Genes, Genomes, Genetics*, *9*(10), 3297–3314.
+<https://doi.org/10.1534/g3.119.400378>.
+
+Bourke, P. M., van Geest, G., Voorrips, R. E., Jansen, J., Kranenburg, T.,
+Shahin, A., Visser, R. G. F., Arens, P., Smulders, M. J. M., & Maliepaard, C.
+(2018). polymapR—linkage analysis and genetic map construction from F1
+populations of outcrossing polyploids. *Bioinformatics*, *34*(20), 3496–3502.
+<https://doi.org/10.1093/bioinformatics/bty371>.
+
+Rastas, P. (2017). Lep-MAP3: robust linkage mapping even for low-coverage
+whole genome sequencing data. *Bioinformatics*, *33*(23), 3726–3732.
+<https://doi.org/10.1093/bioinformatics/btx494>.

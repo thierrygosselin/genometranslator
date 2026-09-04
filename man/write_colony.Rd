@@ -2,7 +2,7 @@
 % Please edit documentation in R/write_colony.R
 \name{write_colony}
 \alias{write_colony}
-\title{Write a COLONY file}
+\title{Write COLONY}
 \usage{
 write_colony(
   data,
@@ -18,154 +18,128 @@ write_colony(
   analysis = 1,
   allelic.dropout = 0,
   error.rate = 0.02,
-  print.all.colony.opt = FALSE,
-  random.seed = NULL,
-  verbose = FALSE,
-  parallel.core = parallel::detectCores() - 1,
+  random.seed = 1234L,
+  role.column = NULL,
+  probability.father = NULL,
+  probability.mother = NULL,
+  num.runs = 1L,
   filename = NULL,
-  ...
+  path.folder = getwd(),
+  chunk.size = 32L,
+  overwrite = FALSE,
+  verbose = TRUE
 )
 }
 \arguments{
-\item{data}{A supported genomic file, object, or tidy genomic data frame.
-Default: \code{data = NULL}.}
+\item{data}{Open SeqArray GDS or an existing GDS path. Active selections and
+genometranslator whitelists are respected and restored after export.}
 
-\item{strata}{(path or object) The strata file or object.
-Additional documentation is available in \code{\link{read_strata}}.
-Use that function to whitelist/blacklist populations/individuals.
-Option to set \code{pop.levels/pop.labels} is also available.
-Default: \code{strata = NULL}.}
+\item{strata}{Optional sample metadata table or TSV file with unique
+INDIVIDUALS. Must cover every active sample; matching is by ID, not row order.}
 
-\item{sample.markers}{(number) \code{COLONY} can take a long time to run,
-use a random subsample of your markers to speed test \code{COLONY}
-e.g. \code{sample.markers = 500} to use only 500 randomly chosen markers.
-With the default, Will use all markers.
-Default: \code{sample.markers = NULL}.}
+\item{sample.markers}{Optional number of loci to sample without replacement.}
 
-\item{pop.select}{(optional, string) Selected list of populations for
-the analysis. e.g. \code{pop.select = c("QUE", "ONT")} to select \code{QUE}
-and \code{ONT} population samples (out of 20 pops). If \code{pop.labels}
-argument was used to rename the strata column, use the new names with
-\code{pop.select}.
-Default: \code{pop.select = NULL}.}
+\item{pop.select}{Optional STRATA values to retain before locus sampling.}
 
-\item{allele.freq}{(optional, string) Allele frequency can be computed from
-a select group.
-e.g. \code{allele.freq = "QUE"} or \code{allele.freq = c("QUE", "ONT")}.
-Using \code{allele.freq = "overall"} will use all the samples to compute the
-allele frequency.
-With the default, Will not compute allele frequency.
-Default: \code{allele.freq = NULL}.}
+\item{allele.freq}{NULL to let COLONY estimate frequencies, "overall" to
+estimate them from all exported samples, or STRATA values defining the
+frequency reference subset. Every allele observed in the export must occur
+in that subset. Empirical frequencies are not rounded to two decimals.}
 
-\item{inbreeding}{(boolean) 0/1 no inbreeding/inbreeding.
-Default: \code{inbreeding = 0}.}
+\item{inbreeding}{0 for no inbreeding, 1 to allow inbreeding.}
 
-\item{mating.sys.males}{(boolean) Mating system in males.
-0/1 polygyny/monogyny.
-Default: \code{mating.sys.males = 0}.}
+\item{mating.sys.males, mating.sys.females}{0 for polygamy, 1 for monogamy.
+These describe mating over the sampled cohorts, not only one breeding season.}
 
-\item{mating.sys.females}{(boolean) Mating system in females.
-0/1 polygyny/monogyny.
-Default: \code{mating.sys.females = 0}.}
+\item{clone}{0 to disable clone inference, 1 to enable it.}
 
-\item{clone}{(boolean) Should clones and duplicated individuals be inferred.
-0/1, yes/no. Default: \code{clone = 0}.}
+\item{run.length}{1, 2, 3 or 4 for short, medium, long or very long runs.}
 
-\item{run.length}{(integer) Length of run. 1 (short), 2 (medium), 3 (long),
-4 (very long). Start with short or medium run and consider longer run if your
-estimates probability are not stable or really good.
-Default: \code{run.length = 2}.}
+\item{analysis}{0 for pairwise-likelihood score, 1 for full likelihood,
+or 2 for their combined method.}
 
-\item{analysis}{(integer) Analysis method.
-0 (Pairwise-Likelihood Score), 1 (Full Likelihood),
-2 (combined Pairwise-Likelihood Score and Full Likelihood).
-Default: \code{analysis = 1}.}
+\item{allelic.dropout, error.rate}{Scalar allelic-dropout and other typing
+error probabilities from zero (inclusive) to one (exclusive).
+Applied to every exported locus.}
 
-\item{allelic.dropout}{Locus allelic dropout rate.
-Default : \code{allelic.dropout = 0}.
-Default: \code{allelic.dropout = 0}.}
+\item{random.seed}{Positive integer used for locus sampling and written to
+COLONY. Default 1234. Sampling restores the caller's R random-number state.}
 
-\item{error.rate}{Locus error rate.
-Default: \code{error.rate = 0.02}.}
+\item{role.column}{Optional metadata column containing offspring, father or
+mother (case-insensitive; whitespace is trimmed). Each sample has one role.
+NULL treats all samples as offspring. At least one offspring is required.}
 
-\item{print.all.colony.opt}{(logical) Should all \code{COLONY} options be printed in the file.
+\item{probability.father, probability.mother}{Candidate-parent inclusion
+probabilities from zero to one, inclusive. Required when candidates are present;
+otherwise zero. They are not estimated from the number of candidates.}
 
-\strong{This require manual curation, for the file to work directly with \code{COLONY}}.
-Default = \code{print.all.colony.opt = FALSE}.
-Default: \code{print.all.colony.opt = FALSE}.}
+\item{num.runs}{Number of replicate COLONY runs.}
 
-\item{random.seed}{(integer, optional) For reproducibility, set an integer
-that will be used inside the function that requires randomness. With default,
-a random number is generated and printed in the appropriate output.
-Default: \code{random.seed = NULL}.}
+\item{filename}{Output basename, optionally ending in .dat.}
 
-\item{verbose}{Logical indicating whether progress messages are emitted.
-Default: \code{verbose = FALSE}.}
+\item{path.folder}{Output directory.}
 
-\item{parallel.core}{Number of workers available for parallel operations.
-Default: \code{parallel.core = parallel::detectCores() - 1}.}
+\item{chunk.size}{Number of samples per GDS read block.}
 
-\item{filename}{Name of the acronym for filenaming in the working directory.
-Default: \code{filename = NULL}.}
+\item{overwrite}{Allow replacement of existing export files.}
 
-\item{...}{Additional arguments passed to lower-level readers, translators,
-or writers.}
+\item{verbose}{Display messages wrapped to 80 characters.}
 }
 \value{
-A \code{COLONY} file in your working directory (2 if you selected imputations arguments...)
+Invisibly, named paths to the COLONY .dat file and sample, locus
+and allele mapping TSV files. COLONY uses S1... sample IDs and L1... locus
+IDs; interpret results through these tables. Run COLONY in a separate folder
+for each dataset: its output prefix is the fixed safe name colony_result.
 }
 \description{
-Write a \code{COLONY} input file.
+Export diploid allele-index calls from a SeqArray GDS to a
+COLONY input file, with sample, locus and allele correspondence tables.
+This function exports data; it does not run COLONY or infer relationships.
 }
 \details{
-\strong{It is highly recommended to read (twice!) the user guide distributed with
-\code{COLONY} to find out the details for input and output of the software.}
-
-Not all options are provided here.
-
-But to ease the process, all the required options to properly run \code{COLONY}
-will be printed in the file written in your working directory.
-Change the values accordingly and wisely.
+\itemize{
+\item Exports codominant, diploid SNP or multiallelic calls. Allele codes
+are positive integers local to each locus. Fully missing calls become 0 0;
+partially missing calls, symbolic alleles and presence/absence data are rejected.
+\item Uses dioecious diploid settings, full-sibship scaling, no sibship
+prior, no known/excluded relationships, and very-high likelihood precision.
+Haplodiploid, dominant-marker and overlapping sample-role exports are not
+supported. Candidate parents are optional, never guessed from sample names.
+\item Rejects loci without at least two observed alleles across exported
+samples. No imputation, LD pruning or biological null-allele calling occurs.
+Assess population structure, batch effects, linkage and typing errors before
+inference. Multiple SNPs from one RAD locus are not independent evidence.
+\item Depth, genotype likelihoods and phase are not represented in this
+hard-call format. Preserve the original GDS. Error-rate parameters are
+locus-level model settings, not per-genotype GL or PL values.
+\item Reads the GDS in sample blocks, but retains the exported allele matrix
+in RAM. This is not an out-of-core whole-genome inference workflow.
+\item Files are staged before publication; existing files are protected
+unless overwrite is TRUE. The GDS is never modified.
 }
-\section{Data filtering}{
-
-This writer does not silently filter markers or individuals. It may validate
-requirements imposed by the destination format and stop with an informative
-error when the input is unsuitable. It is the user's responsibility to
-filter and quality-control the data appropriately for the intended analysis
-before generating the output. Use
-\href{https://thierrygosselin.github.io/radr/}{\pkg{radr}} or another
-suitable workflow when filtering is required.
 }
-
-\section{Dependencies}{
-
-Required package dependencies are declared in \code{DESCRIPTION} and are
-installed with \pkg{genometranslator}. Any additional dependency needed only
-for this format or option is identified in this help page. Use
-\code{genometranslator_dependencies()} to inspect the availability of core
-packages, optional packages, and external executables.
-}
-
 \examples{
 \dontrun{
-# Simplest way to run the function with a tidy dataset:
-colony.file <- genometranslator::write_colony(data = "turtle.data.rad")
+files <- genometranslator::write_colony("study.gds",
+  filename = "study", path.folder = "colony_export", random.seed = 1234)
+# For candidate parents, metadata must assign each sample one explicit role:
+files <- genometranslator::write_colony("study.gds", strata = "samples.tsv",
+  role.column = "ROLE", probability.father = 0.5,
+  probability.mother = 0.5, filename = "parentage")
 }
 }
 \references{
-Jones OR, Wang J (2010) COLONY: a program for parentage and
-sibship inference from multilocus genotype data.
-Molecular Ecology Resources, 10, 551–555.
+Jones, O. R., & Wang, J. (2010). COLONY: a program for parentage
+and sibship inference from multilocus genotype data. Molecular Ecology
+Resources, 10, 551–555. \doi{10.1111/j.1755-0998.2009.02787.x}.
 
-Wang J (2012) Computationally Efficient Sibship and
-Parentage Assignment from Multilocus Marker Data. Genetics, 191, 183–194.
+Wang, J. (2012). Computationally efficient sibship and parentage assignment
+from multilocus marker data. Genetics, 191, 183–194.
+\doi{10.1534/genetics.111.138149}.
 }
 \seealso{
-\code{COLONY} is available on Jinliang Wang web site
-\url{https://www.zsl.org/science/software/colony}
-
-\href{https://thierrygosselin.github.io/radiator/articles/rad_genomics_computer_setup.html#colony}{colony installation instructions}
+\url{https://www.zsl.org/about-zsl/resources/software/colony}
+for the official software and user guide, section 4.1 (input specification).
 }
 \author{
 Thierry Gosselin \email{thierrygosselin@icloud.com}

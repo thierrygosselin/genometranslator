@@ -67,8 +67,7 @@ dimensions, mask, per-record audit, and export parameters.
 }
 \description{
 Build a joint site-frequency spectrum from active diploid GDS
-calls and write a native dadi \code{.fs} file. Replaces the legacy tidy-data SNP
-table writer; the old FASTA and sumstats arguments are no longer used.
+calls and write a native dadi \code{.fs} file.
 }
 \details{
 Uses the same site selection and global folding as

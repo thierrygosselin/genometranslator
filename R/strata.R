@@ -97,8 +97,7 @@
 #' that use strata for matching, including VCF and haplotype workflows.
 #'
 #' A Stacks population map can be used after its columns are named
-#' \code{INDIVIDUALS} and \code{STRATA}. To construct metadata from sample names,
-#' see \code{\link{individuals2strata}}.
+#' \code{INDIVIDUALS} and \code{STRATA}.
 #'
 #' @section Column handling:
 #' \describe{
@@ -136,8 +135,8 @@
 #' See the example in \code{\link{extract_dart_target_id}}
 
 #' @seealso \code{\link{summary_strata}},
-#' \code{\link{individuals2strata}}, \code{\link{change_pop_names}},
-#' \code{\link{join_strata}}, \code{\link{generate_strata}}
+#' \code{\link{change_pop_names}},
+#' \code{\link{join_strata}}
 
 #' @rdname read_strata
 #' @param verbose Logical indicating whether progress messages are emitted.
@@ -377,8 +376,8 @@ read_strata <- function(
 #' and might be of interest for users.
 #' @param strata (path or object) The strata file or object.
 #' @seealso \code{\link{read_strata}},
-#' \code{\link{individuals2strata}}, \code{\link{change_pop_names}},
-#' \code{\link{join_strata}}, \code{\link{generate_strata}}
+#' \code{\link{change_pop_names}},
+#' \code{\link{join_strata}}
 #' @rdname summary_strata
 #' @export
 #' @return
@@ -442,7 +441,7 @@ summary_strata <- function(strata) {
 #' Default: \code{filename = NULL}.
 #' @seealso \code{\link{read_strata}}, \code{\link{summary_strata}},
 #' \code{\link{change_pop_names}},
-#' \code{\link{join_strata}}, \code{\link{generate_strata}}
+#' \code{\link{join_strata}}
 
 #' @return a strata object and file, if requested. The file is tab delimited
 #' with 2 columns named:
@@ -460,7 +459,7 @@ summary_strata <- function(strata) {
 #' \code{strata.start = 5} and \code{strata.end = 7}.
 #' The \code{STRATA} column can be any hierarchical grouping.
 
-#' @export
+#' @keywords internal
 #' @rdname individuals2strata
 
 
@@ -519,8 +518,8 @@ individuals2strata <- function(
 #' @inheritParams tidy_genome
 #' @inheritParams read_strata
 #' @seealso \code{\link{read_strata}}, \code{\link{summary_strata}},
-#' \code{\link{individuals2strata}},
-#' \code{\link{join_strata}}, \code{\link{generate_strata}}
+#'
+#' \code{\link{join_strata}}
 
 #' @rdname change_pop_names
 #' @export
@@ -639,8 +638,7 @@ check_pop_levels <- function(
 
 
 #' @seealso \code{\link{read_strata}}, \code{\link{summary_strata}},
-#' \code{\link{individuals2strata}}, \code{\link{change_pop_names}},
-#' \code{\link{generate_strata}}
+#' \code{\link{change_pop_names}}
 
 
 
@@ -708,7 +706,7 @@ join_strata <- function(data, strata = NULL, pop.id = FALSE, verbose = TRUE) {
 
 #' @inheritParams join_strata
 #' @seealso \code{\link{read_strata}}, \code{\link{summary_strata}},
-#' \code{\link{individuals2strata}}, \code{\link{change_pop_names}},
+#' \code{\link{change_pop_names}},
 #' \code{\link{join_strata}}
 
 #' @rdname generate_strata
@@ -717,7 +715,7 @@ join_strata <- function(data, strata = NULL, pop.id = FALSE, verbose = TRUE) {
 #' With the default, Returns \code{STRATA}.
 #' Default: \code{pop.id = FALSE}.
 #'
-#' @export
+#' @keywords internal
 
 #' @author Thierry Gosselin \email{thierrygosselin@@icloud.com}
 

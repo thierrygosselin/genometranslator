@@ -131,8 +131,7 @@ sample whitelist: samples absent from the table are not retained by importers
 that use strata for matching, including VCF and haplotype workflows.
 
 A Stacks population map can be used after its columns are named
-\code{INDIVIDUALS} and \code{STRATA}. To construct metadata from sample names,
-see \code{\link{individuals2strata}}.
+\code{INDIVIDUALS} and \code{STRATA}.
 }
 \section{Column handling}{
 
@@ -205,6 +204,6 @@ new.strata <- genometranslator::read_strata(
 }
 \seealso{
 \code{\link{summary_strata}},
-\code{\link{individuals2strata}}, \code{\link{change_pop_names}},
-\code{\link{join_strata}}, \code{\link{generate_strata}}
+\code{\link{change_pop_names}},
+\code{\link{join_strata}}
 }

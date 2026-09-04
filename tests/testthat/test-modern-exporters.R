@@ -17,10 +17,7 @@ test_that("multiallelic text formats retain counts and allele pairs", {
   expect_true("1 4 2 3 1" %in% lines)
   expect_true("3 2 3 0 1 1" %in% lines)
   expect_false(any(grepl("GENE_N",lines)))
-  q <- write_related(f$gds, filename="q", path.folder=folder, verbose=FALSE)
-  expect_true("S2 1 2 1 1 0 0" %in% readLines(q$files[1]))
   expect_identical(SeqArray::seqGetFilter(f$gds),before)
-  expect_error(write_faststructure(f$gds, strata=f$strata, verbose=FALSE),"biallelic")
 })
 
 test_that("biallelic exporters use the documented orientations", {
@@ -29,11 +26,6 @@ test_that("biallelic exporters use the documented orientations", {
   SeqArray::seqSetFilter(f$gds,variant.id=1:2,verbose=FALSE)
   folder<-tempfile();dir.create(folder)
   on.exit(unlink(folder,recursive=TRUE),add=TRUE)
-  fs<-write_faststructure(f$gds,strata=f$strata,filename="fs",path.folder=folder,verbose=FALSE)
-  lines<-strsplit(readLines(fs$files[1]),"\t")
-  expect_length(lines,8)
-  expect_true(all(lengths(lines)==8))
-  expect_equal(lines[[1]][7:8],c("1","-9"))
   pc<-write_pcadapt(f$gds,filename="pc",path.folder=folder,verbose=FALSE)
   expect_equal(unname(pc$genotype.matrix[1,]),c(0,1,2,1))
   expect_equal(pc$genotype.matrix[2,1],9,ignore_attr=TRUE)
@@ -95,17 +87,6 @@ test_that("FSTAT validates allele widths and metadata bounds", {
   expect_error(read_fstat(data.frame(x=c("1 1 2 2","L","1 011"))),"width")
   x <- read_fstat(data.frame(x=c("1 1 12 2","L","1 0112")))
   expect_equal(x$GENOTYPE,"001012")
-})
-
-test_that("RADpainter writes nucleotide haplotypes without inventing phase", {
-  f<-export_fixture()
-  on.exit({SeqArray::seqClose(f$gds);unlink(f$path)},add=TRUE)
-  folder<-tempfile();dir.create(folder)
-  on.exit(unlink(folder,recursive=TRUE),add=TRUE)
-  x<-write_fineradstructure(f$gds,filename="fine",path.folder=folder,verbose=FALSE)
-  lines<-readLines(x$files[1])
-  expect_equal(lines[1],"S1\tS2\tS3\tS4")
-  expect_equal(strsplit(lines[4],"\t")[[1]],c("C/G","","A/C","A/A"))
 })
 
 test_that("gtypes writing has a live roundtrip when strataG is installed", {

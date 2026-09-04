@@ -96,6 +96,16 @@ section of the package README and check visibility with
 \code{Sys.which("bcftools")}.
 }
 
+\section{Conversion safeguards}{
+
+Sample-bearing records must contain a leading GT field. Valid VCF records
+without GT are rejected before import: this genotype-GDS route cannot safely
+represent them. Retain the original file; add explicitly missing GT calls in
+a separate copy only with known sample ploidy, or call genotypes upstream.
+Chromosome names retain their prefixes and valid FORMAT cardinalities are
+preserved. Reimport affected older GDS files from the original VCF.
+}
+
 \section{Future work}{
 
 TODO: add explicit support for blocked gVCF. This is not currently supported

@@ -40,12 +40,6 @@ filtered, and translated without first creating one row per sample and marker
 in memory. Use `tidy_genome()` only when a downstream task specifically needs
 an in-memory table.
 
-The former `tidy_vcf()` convenience wrapper is no longer part of
-`genometranslator`. Use `read_genome()` for automatic format detection or
-`read_vcf()` for VCF-specific import controls. Apply genomic filters with
-`radr`, and call `tidy_genome()` separately if a table is required. The legacy
-`tidy_vcf()` implementation remains in `radiator` for historical workflows.
-
 The examples below are not evaluated because they refer to files supplied by
 the user.
 
@@ -758,6 +752,40 @@ Keep the GDS and companion tables for those purposes. See the
 [official Genepop input specification](https://f-rousset.r-universe.dev/genepop/doc/the-input-file.html)
 for the format rules.
 
+### Exporting mapping families to Lep-MAP3
+
+`write_lepmap3()` exports active GDS samples and biallelic diploid SNPs to a
+minimal VCF, retaining PL or GL genotype likelihoods rather than inventing
+certainty from hard calls. It also writes the six-row transposed pedigree,
+sample and marker mapping tables, and an example ParentCall2 command.
+
+```{r lepmap3-export, eval=FALSE}
+pedigree <- data.frame(
+  FAMILY = "F1", INDIVIDUALS = c("father", "mother", "offspring"),
+  FATHER = c("0", "0", "father"), MOTHER = c("0", "0", "mother"),
+  SEX = c(1, 2, 0)
+)
+files <- genometranslator::write_lepmap3(
+  "family.gds", pedigree = pedigree, likelihood = "PL",
+  filename = "family", path.folder = "exports"
+)
+```
+
+Provide the pedigree explicitly: population labels are not parentage records.
+Rows are reordered to the active GDS sample IDs. This initial exporter requires
+all named parents to be active samples in the same family; it checks parent
+sex, self-parenting and ancestry cycles. Missing likelihood vectors remain
+missing, whereas partial/malformed vectors or markers without any observed
+likelihoods stop the export. No unsequenced parent, sex-chromosome model or
+mapping filter is inferred. The exported command is not run automatically.
+
+Lep-MAP3 was developed for linkage mapping using genotype likelihoods, including
+low-coverage sequencing: Rastas, P. (2017). Lep-MAP3: robust linkage mapping
+even for low-coverage whole genome sequencing data. *Bioinformatics*, 33,
+3726–3732. <https://doi.org/10.1093/bioinformatics/btx494>.
+Consult the [Lep-MAP3 manual](https://sourceforge.net/p/lep-map3/wiki/LM3%20Home/)
+for analysis settings appropriate to the pedigree.
+
 ### Exporting to kinference
 
 `write_kinference()` saves a `gbasics::snpgeno` object as RDS, together with
@@ -826,14 +854,11 @@ format's missing-value convention.
 | adegenet genlight | `write_genlight()` | Biallelic ALT dosage. |
 | strataG gtypes | `write_gtypes()` | Diploid allele pairs; optional strataG package. |
 | STRUCTURE | `write_structure()` | Two rows per individual, locus header, missing `-9`. |
-| fastSTRUCTURE | `write_faststructure()` | Biallelic; two rows and six metadata columns, or PLINK BED. |
 | BayeScan | `write_bayescan()` | Population allele counts; rejects unobserved population–locus cells. |
-| fineRADstructure / RADpainter | `write_fineradstructure()` | One variant record per locus with haplotype alleles; no unphased SNP concatenation. |
 | HapMap | `write_hapmap()` | Biallelic nucleotide SNPs with real reference coordinates. |
 | HZAR | `write_hzar()` | Biallelic frequencies and called sample counts; explicit population distances. |
 | LDna | `write_ldna()` | Pairwise r² matrix; quadratic memory, with a marker-count guard. |
 | pcadapt | `write_pcadapt()` | Locus-by-individual biallelic ALT dosage; missing `9`. |
-| related | `write_related()` | Individual identifier and diploid allele pairs; missing `0`. |
 | SNPRelate | `write_snprelate()` | Biallelic SNPRelate GDS; close the returned handle after use. |
 | stockR | `write_stockr()` | Locus-by-individual biallelic dosage and sample groups. |
 
@@ -859,8 +884,6 @@ establish that BayeScan's population model fits the study design.
 `write_maverick()` has been removed. Use `write_structure()` when STRUCTURE input
 is appropriate; software-specific settings still require independent checking.
 
-Consult the [fastSTRUCTURE input documentation](https://github.com/rajanil/fastStructure),
-[BayeScan documentation](https://github.com/mfoll/BayeScan),
-[fineRADstructure documentation](https://www.milan-malinsky.org/fineradstructure),
+Consult the [BayeScan documentation](https://github.com/mfoll/BayeScan),
 and [pcadapt guide](https://bcm-uga.github.io/pcadapt/articles/pcadapt.html)
 before running the downstream analysis.

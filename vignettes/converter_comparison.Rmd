@@ -1,0 +1,321 @@
+---
+title: "Choosing a genomic data converter"
+author: "Thierry Gosselin"
+date: "2026-09-04"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Choosing a genomic data converter}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+## Compare conversion paths, not just format lists
+
+A converter must preserve the information required by the downstream analysis.
+Test sample identities, allele identities, ploidy, missingness, chromosome names,
+positions, phase, and relevant annotations. A successful exit alone is not proof
+of a faithful conversion. This article records scoped comparisons with other
+converters; it is not a claim that genometranslator supports every format or
+that every alternative is unreliable.
+
+## PGDSpider 3.0.0.0: caution with VCF
+
+PGDSpider provides a broad collection of population-genetic formats, a GUI,
+and configurable command-line conversions (Lischer & Excoffier, 2012).
+Its documentation explicitly warns that whole-input memory use makes very large
+NGS files unsuitable. See the [official website](https://software.bioinformatics.unibe.ch/pgdspider/).
+
+On 4 September 2026, the supplied version 3.0.0.0 was examined using compiled
+class inspection and synthetic CLI conversions under Java 17. These findings
+are version- and path-specific, not conclusions drawn from software age or
+unverified issue reports. They should be retested against future versions.
+
+### Reproduced concerns
+
+| Conversion/test | Observed result | Interpretation |
+|:--|:--|:--|
+| VCF input with `GT:PL` values `0/0:.` and `0/1:.`; likelihood calling disabled | Both calls became missing | Missing PL erased valid GT calls even though PL-based calling was disabled. |
+| Biallelic VCF input with sample `DP` values but no `GT`; likelihood calling disabled | Both samples became `0/1` | Depth alone does not establish heterozygosity. |
+| VCF to VCF | Tested DP/PL fields were dropped; `QUAL=50` became `QUAL=-1` | Not an annotation-preserving round-trip; missing QUAL should be `.`. |
+| Microsatellite Genepop to PED | An unsupported-data error was logged, followed by a completion message and exit status zero | Scripts must inspect output and logs, not only the exit status. |
+
+The VCF reader behaviour is visible in `ParseVcf.parseDataLineVariant()`;
+the SNP VCF output is constructed in `VcfWriter`. The initial two reader
+problems were reproduced in runs reporting successful conversion. These are
+not merely losses imposed by a less expressive destination format.
+
+The [VCF specification](https://samtools.github.io/hts-specs/VCFv4.3.pdf) allows
+genotype fields without GT. A converter must not manufacture calls in their
+absence. Missing likelihoods likewise do not imply that an existing GT is missing.
+
+### Controls that worked and limits of the audit
+
+- A diploid Genepop round-trip preserved the tested allele pairs, missing data,
+  and population boundaries; allele-code width changed from two to three digits.
+- Genepop to FSTAT preserved the tested genotypes and population assignments.
+- SNP-coded Genepop to PED preserved the tested allele pairs and missingness.
+- Arlequin, STRUCTURE, BCF, and other paths were not exhaustively tested.
+  These findings do not establish that all PGDSpider conversions are defective.
+
+### Minimal VCF reproduction
+
+Use two samples and three biallelic records, with matching VCF header definitions:
+
+| Record | FORMAT | Sample 1 | Sample 2 |
+|:--|:--|:--|:--|
+| Control | GT:DP | 0/0:10 | 0/1:12 |
+| Missing PL | GT:PL | 0/0:. | 0/1:. |
+| No GT | DP | 10 | 12 |
+
+Set `PARSER_FORMAT=VCF`, `WRITER_FORMAT=VCF`,
+`VCF_PARSER_PLOIDY_QUESTION=DIPLOID`, `VCF_PARSER_PL_QUESTION=false`,
+`VCF_PARSER_MONOMORPHIC_QUESTION=true`,
+`VCF_PARSER_EXC_MISSING_LOCI_QUESTION=false`, and
+`VCF_WRITER_DATA_TYPE_QUESTION=SNP`; leave optional quality thresholds unset.
+Compare the output allele calls and annotations with the input, not just the
+number of records. All three records can remain while their meaning changes.
+
+## genometranslator: safeguards and limitations
+
+For supported VCF/GDS workflows, `read_vcf()` and `write_vcf()` use SeqArray.
+Imported INFO/FORMAT fields can be retained in GDS and exported again; request
+`vcf.metadata = TRUE` when all FORMAT annotations are needed. Inspect import
+options because caller-specific defaults may retain only a subset of fields.
+
+The comparison also exposed issues in genometranslator, addressed as follows:
+
+- VCF chromosome names are imported without SeqArray's default `chr` stripping.
+- Valid FORMAT cardinalities, including AD `Number=R` and PL `Number=G`, are
+  no longer unconditionally replaced by `.`. Malformed caller output may need
+  explicit header repair before import; valid headers should not be weakened.
+- Every sample-bearing record is checked for a leading GT before output
+  creation. A record without GT is valid VCF but is not supported by this
+  genotype-GDS import route. Previously it could produce a GDS that failed
+  during subsequent VCF export.
+
+For GT-free records, retain the original VCF. If genotype storage is required,
+prepare a separate copy with explicitly missing GT calls using known sample
+ploidy, or perform upstream genotype calling. Do not assume diploidy, infer GT
+from depth alone, or replace missing calls with reference homozygotes. This is
+an explicit unsupported-input safeguard, not support for likelihood-only VCF.
+Existing affected GDS files should be reimported from the original VCF; these
+changes cannot reconstruct discarded names or annotations.
+
+Regression tests cover valid calls with missing PL, chromosome identifiers,
+FORMAT cardinalities, and late records without GT. They are not a guarantee of
+lossless conversion for every VCF extension. Blocked gVCF remains unsupported.
+Some exporters materialise matrices in RAM despite the file-backed GDS input.
+
+## genepopedit: manipulation is not necessarily format-neutral
+
+The supplied genepopedit 1.0.0.6 source was examined on 4 September 2026.
+The findings below concern specific helpers and export paths, not every
+operation in the package. Its documented scope is diploid, six-digit allele
+coding and prescribed sample-name and spacing conventions.
+
+- **Missing alleles can enter frequency calculations.** In the supplied
+  `AlleleFreqLoci` helper, `c("001001", "000000", "000000")` gives a frequency
+  of 1/3 for allele 1, rather than 1 among called alleles. The companion
+  `AlleleFreq` helper selects missing code `0` as the major allele for this
+  example. Missing codes are removed only when more than two distinct allele
+  values are present. A monomorphic population with missing observations is
+  therefore an important failure case. An entirely missing vector returns 0
+  rather than an undefined frequency. These are direct helper reproductions,
+  not a test of every end-to-end filtering workflow.
+- **The requested in-memory FSTAT result is not returned.** A small compliant
+  input with `genepop_fstat(..., addworkspace = TRUE)` returned `NULL` rather
+  than the promised data frame. The object is assigned locally but is not
+  returned along that branch.
+- **Population naming conventions matter.** Two separate `Pop` blocks using
+  the same sample-name prefix were merged by the tested individual-subsetting
+  and FSTAT-export paths. The README requires population prefixes before the
+  underscore, so this is a documented input convention that callers must
+  respect—not evidence that all compliant Genepop files are mishandled.
+  Do not assume explicit `Pop` boundaries always take precedence over names.
+
+Successful controls are equally important: the frequency helper returned 0.75
+for allele 1 in `c("001001", "001002", "000000")`; a two-population FSTAT
+fixture with distinct, compliant population prefixes retained both groups.
+These controls narrow the concerns to the cases described above.
+
+Relevant source: [AlleleFreqLoci](https://github.com/rystanley/genepopedit/blob/master/R/AlleleFreqLoci.R),
+[AlleleFreq](https://github.com/rystanley/genepopedit/blob/master/R/AlleleFreq.R),
+[genepop_fstat](https://github.com/rystanley/genepopedit/blob/master/R/genepop_fstat.R),
+and the [input conventions](https://github.com/rystanley/genepopedit).
+These links may change; the findings refer to the inspected version.
+
+For genomic workflows, keep the annotated VCF/GDS as the working master and
+export Genepop only when a downstream analysis requires it. A dedicated
+Genepop editor can still be useful for its intended inputs, but it cannot
+recover read depths, likelihoods or genomic annotations absent from Genepop.
+
+## dartR.captive: COLONY export options need validation
+
+The supplied `dartR.captive-main.zip` was inspected on 4 September 2026,
+specifically `R/gl2colony.r` (`gl2colony()`, `parental.ids()` and its local
+`gl2structure()` helper). These findings concern that source snapshot, not
+every dartR release and not COLONY's inference engine. The requirements below
+were checked against the COLONY user guide supplied with the 15 July 2025 Mac
+distribution, section 4.1. See the
+[official COLONY software and documentation](https://www.zsl.org/about-zsl/resources/software/colony).
+
+### Verified conversion problems
+
+- **Known allele frequencies are incomplete.** `known.allele.freq = 1`
+  writes the flag, but no allele counts, allele labels or frequency records.
+  COLONY requires these records immediately after the flag.
+- **Nonzero sibship priors lack required values.** The documented numeric
+  `sibship.prior = 1`, `2` or `3` lacks the two mean sibship sizes;
+  `4` lacks the effective-size and sex-ratio inputs. Passing the documented
+  indicator alone produces an incomplete prior record.
+- **Known and excluded relationship counts lack supporting records.**
+  Nonzero known-sibship or exclusion counts can be written, but the writer
+  has no corresponding inputs/output blocks for family memberships or
+  excluded pairs. A positive known-parent count likewise needs dyad records.
+  Counts without those records are not usable pedigree constraints.
+- **Partial role metadata are overwritten.** If any one of `offspring`,
+  `mother` or `father` is absent, all three columns are reset and every sample
+  becomes offspring. A warning is printed, but existing roles are discarded.
+- **Role whitespace is not consistently handled.** `parental.ids()` lowercases
+  strings but does not actually trim them. It accepts `"yes "` and `" yes"`,
+  but not `" yes "`; a synthetic test omitted the latter sample.
+
+Synthetic calls using an actual `genlight` object reproduced the incomplete
+frequency/prior/known-sibship output and the whitespace omission. Only the
+dartR console/path/datatype helper functions were substituted for the isolated
+writer test; the genotype conversion, role selection and file-writing code
+were unchanged. The incomplete file was accompanied by a successful-export
+message. These were format checks, not end-to-end COLONY inference runs.
+
+### What worked, and why retain COLONY
+
+- The tested diploid biallelic dosage conversion preserved `0`, `1`, `2`
+  and missing calls as `1 1`, `1 2`, `2 2` and `0 0`, respectively.
+- COLONY's `mk@`, `0@` and scalar-error `x@` shorthand is valid; its use is
+  not a bug. The problems above are conditional on particular options or
+  metadata, not proof that every default export fails.
+- COLONY supports joint sibship and parentage reconstruction, including
+  candidate parents and mating-system assumptions (Jones & Wang, 2010;
+  Wang, 2012). This remains a useful complementary analysis, not something
+  made redundant solely by the availability of another kinship program.
+
+The legacy genometranslator writer also had a serious settings-forwarding bug:
+it accepted analysis arguments but called its helper with only data and a
+filename. Its replacement uses validated diploid GDS calls, explicit optional
+sample roles, reproducible locus sampling, complete empirical-frequency blocks,
+and sample/locus/allele mapping files. Unsupported pedigree constraints are not
+exposed. This does not certify COLONY's engine, nor imply that any writer can
+repair inadequate genotyping, population structure or linked-marker sampling.
+
+## dartR.base: coordinate and annotation fidelity
+
+The supplied `dartR.base-main.zip` was inspected on 4 September 2026.
+The following findings apply to its `R/gl2gds.r`, `R/gl2vcf.r`,
+`R/gl.read.vcf.r` and `R/gl2plink.r` source files. They should be retested
+against later versions, rather than attributed to every dartR release.
+
+### Highest-priority findings
+
+| Function | Reproduced behaviour | Consequence |
+|:--|:--|:--|
+| `gl2gds()` | Genotypes and marker IDs use the inverse sorting permutation, while coordinates use the sorted order. | Coordinates can be attached to the wrong markers. |
+| `gl2vcf()` | When all existing positions are below 1,000 and `snp.pos` is omitted, those positions become zero before the PLINK hand-off. | Valid positions near chromosome starts or on short scaffolds are lost. |
+| `gl.read.vcf()` | INFO values are assigned by position using the first record's field names, rather than matched by key. | Reordering INFO entries can silently exchange annotation meanings. |
+
+**GDS sorting example.** The actual exported SNPRelate GDS contained these
+marker-to-position assignments:
+
+| Marker | Input position | Exported position |
+|:--|--:|--:|
+| m1 | 300 | 200 |
+| m2 | 100 | 300 |
+| m3 | 200 | 100 |
+
+The problem is not merely a different row order. The marker-coordinate
+associations changed. In this example, the sorted row indices are `2, 3, 1`,
+but applying `order()` to those indices gives `3, 1, 2`, which the writer uses
+for the genotype matrix and marker IDs. Identity permutations and simple
+swaps can conceal this defect. Position-dependent analyses may consequently
+use incorrect genomic locations.
+
+**VCF position example.** A `genlight` object with chromosome assignments and
+valid positions `300, 100, 200` was passed to `gl2vcf()` without `snp.pos`.
+The object handed to its PLINK writer had positions `0, 0, 0`. The code uses
+coordinate magnitude as a proxy for within-read rather than reference-genome
+coordinates; that distinction cannot safely be inferred from a 1,000-base
+threshold. This test stopped at the PLINK hand-off, not at a final VCF file.
+
+**VCF INFO example.** Executing the reader's INFO-parsing block on these
+two records:
+
+```text
+DP=10;AC=1
+AC=2;DP=20
+```
+
+produced `DP=2, AC=20` for the second record, instead of `DP=20, AC=2`.
+INFO entries are keyed annotations, not fixed-position columns; their
+interpretation must follow their keys and header definitions. See the
+[VCF specification](https://samtools.github.io/hts-specs/VCFv4.3.pdf).
+This reproduction exercised the parsing block separately, not a complete
+`vcfR`-to-dartR import.
+
+### PLINK scalar sex-code handling
+
+`gl2plink()` converts textual sex labels only when `length(sex.code) > 1`.
+The generated PED file therefore contained the literal default `unknown`;
+the same branch also leaves scalar `male` or `female` unconverted. A scalar
+assignment should be encoded consistently with vector assignments, using
+PLINK's numeric convention: 1 for male, 2 for female, and 0 for unknown.
+See the [PLINK file-format reference](https://www.cog-genomics.org/plink/1.9/formats#fam).
+The emitted text was checked; downstream PLINK treatment of these strings
+was not tested, so rejection or a particular sex assignment is not claimed.
+
+### Scope and interpretation
+
+- GDS and PED files were generated from real `genlight` objects. Console,
+  path and datatype helpers were substituted for the isolated writer tests;
+  the relevant conversion and file-writing code was unchanged.
+- The VCF writer was intercepted at its PLINK hand-off, and the VCF reader's
+  INFO block was tested independently. Neither was an end-to-end VCF
+  round-trip test.
+- These are metadata-fidelity defects, not unavoidable losses imposed by
+  genlight, GDS, VCF or PLINK. They do not establish that all conversions fail
+  or that all downstream statistics change.
+- `gl2gds()` creates a SNPRelate GDS, not a SeqArray GDS. Sharing the `.gds`
+  extension does not make their schemas or supported annotations identical;
+  that distinction is a format limitation, not itself a bug.
+
+## Recommendation
+
+Prefer a tested VCF/GDS workflow when retaining genomic coordinates and genotype
+annotations matters. For PGDSpider, validate the exact input/output route and
+settings, especially any VCF reader path. For Genepop, PED, and other legacy
+formats, information such as likelihoods may be unrepresentable regardless of
+the converter. Keep the original VCF as the source of record.
+
+## References
+
+Jones, O. R., & Wang, J. (2010). COLONY: a program for parentage and sibship
+inference from multilocus genotype data. *Molecular Ecology Resources*, 10,
+551–555. <https://doi.org/10.1111/j.1755-0998.2009.02787.x>.
+
+Wang, J. (2012). Computationally efficient sibship and parentage assignment
+from multilocus marker data. *Genetics*, 191, 183–194.
+<https://doi.org/10.1534/genetics.111.138149>.
+
+Stanley, R., with contributions from Bradbury, I., Wringe, B., Jeffery, N.,
+and Lehnert, S. *genepopedit: Simple and flexible manipulation of genomic data*.
+R package, inspected version 1.0.0.6. <https://github.com/rystanley/genepopedit>.
+Source inspected 4 September 2026.
+
+Lischer, H. E. L., & Excoffier, L. (2012). PGDSpider: an automated data conversion
+tool for connecting population genetics and genomics programs. *Bioinformatics*,
+28, 298–299. <https://doi.org/10.1093/bioinformatics/btr642>.
+
+Danecek, P., et al. (2011). The variant call format and VCFtools.
+*Bioinformatics*, 27, 2156–2158. <https://doi.org/10.1093/bioinformatics/btr330>.
+
+Zheng, X., et al. (2017). SeqArray—a storage-efficient high-performance data
+format for WGS variant calls. *Bioinformatics*, 33, 2251–2257.
+<https://doi.org/10.1093/bioinformatics/btx145>.

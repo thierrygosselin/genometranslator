@@ -22,9 +22,10 @@ The function uses the \code{POP_ID} or \code{STRATA} columns along the
 }
 \seealso{
 \code{\link{read_strata}}, \code{\link{summary_strata}},
-\code{\link{individuals2strata}}, \code{\link{change_pop_names}},
+\code{\link{change_pop_names}},
 \code{\link{join_strata}}
 }
 \author{
 Thierry Gosselin \email{thierrygosselin@icloud.com}
 }
+\keyword{internal}
