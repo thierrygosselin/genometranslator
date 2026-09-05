@@ -60,6 +60,24 @@ genotypes <- genometranslator::tidy_genome(data = genome)
 ```
 
 
+## Prepare an OutFLANK scan
+
+`write_outflank()` calculates corrected and uncorrected population FST
+components directly from diploid biallelic GDS calls, reading loci in blocks.
+It writes the OutFLANK statistics table and sample, population and locus audits.
+Filenames include a `YYYYMMDD@HHMM` timestamp; existing files are never replaced.
+Population metadata are matched by sample ID. The default stops on insufficient
+per-population calls or monomorphic loci; explicit exclusions are audited.
+
+```{r outflank-export, eval=FALSE}
+exported <- genometranslator::write_outflank(
+  data = "study.gds", strata = "samples.tsv", filename = "study"
+)
+```
+
+See `?write_outflank` for assumptions, references and the downstream example.
+The writer does not run a selection scan or fix downstream OutFLANK issues.
+
 ## Installation
 
 `genometranslator` uses CRAN, Bioconductor, and GitHub dependencies. Starting

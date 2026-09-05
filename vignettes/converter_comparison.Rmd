@@ -286,6 +286,86 @@ was not tested, so rejection or a particular sex assignment is not claimed.
   extension does not make their schemas or supported annotations identical;
   that distinction is a format limitation, not itself a bug.
 
+## dartR.popgen: OutFLANK wrapper
+
+Reviewed on **5 September 2026**, using the supplied dartR.popgen 1.2.2
+source dated 23 March 2026 (archive revision
+`a4d19fe9d30498c17369200a24c5c3094c24aa2a`). The live `gl.outflank.r`
+matched that wrapper during review; the other helpers were checked in the
+archive. These findings are version-specific, not claims about all releases.
+
+**Important:** `gl.outflank()` calls embedded `utils.outflank` routines,
+not `OutFLANK::OutFLANK()`. Installing an updated OutFLANK package does not
+automatically update dartR's embedded implementation.
+
+### Reproduced calculation problems
+
+- **Equal population frequencies:** the embedded diploid helper returns a
+  scalar zero when among-population allele-frequency variance is zero.
+  Its caller recycles that zero across all eight statistics, including He
+  and mean allele frequency. Equal frequencies do not imply monomorphism.
+- **Insufficient population data:** when missing-call removal leaves called
+  genotypes in only one population, the helper errors rather than identifying
+  the locus as unestimable.
+- **Numerical overflow:** the embedded likelihood multiplies a probability
+  by `gamma(df/2)`. The tested example at 400 degrees of freedom produces
+  a nonfinite likelihood. This concerns fitting, not file conversion.
+
+These small examples reproduce the helper failures when run after sourcing
+the reviewed `utils.outflank.diploids.r` and
+`utils.outflank.likelihood.r` files into an isolated R environment:
+
+```{r dartr-outflank-reproductions, eval=FALSE}
+# Two populations, each with two individuals of each genotype.
+WC_FST_Diploids_2Alleles(matrix(2, nrow = 2, ncol = 3))
+# Reviewed source: scalar 0. Expected He and mean frequency are both 0.5.
+
+getFSTs_diploids(rep(c("A", "B"), each = 3), c(0, 1, 2, 9, 9, 9))
+# Reviewed source: error; only population A has called genotypes.
+
+negLLdfFstTrim(.1, 400, .1, .05, .2)
+# Reviewed source: nonfinite result from the gamma calculation.
+```
+
+### Wrapper behavior and conditional risks
+
+- **Allele columns enter fitting before deduplication.** A biallelic genind
+  locus occupies two allele-count columns. The wrapper passes both through
+  fitting, then deduplicates the results by reconstructed locus name. This
+  was verified with real genind data and the supplied wrapper, but with the
+  downstream scan stubbed. Its effect on final significance was not tested.
+- **Periods in original identifiers can cause collisions.** The wrapper
+  removes everything following the first period. If names such as
+  `scaf.1.A` and `scaf.2.A` reach that step, both become `scaf`. Some importers
+  sanitize periods first; this is a conditional hazard, not an observed loss
+  for every genlight input.
+- **Additional arguments are not forwarded.** The wrapper accepts `...`
+  but does not pass it to the embedded scan. Do not assume an extra argument
+  changes the underlying analysis.
+- **The index is not an outlier mask.** It is `!OutlierFlag`: TRUE means not
+  flagged as an outlier; untested NA flags remain NA. Automatic all-NA
+  filtering and later deduplication also mean users should match locus names,
+  not blindly apply a positional index to the original dataset.
+
+### What write_outflank does—and does not—address
+
+`genometranslator::write_outflank()` exports one row per selected locus,
+preserves and validates marker IDs, matches population metadata by sample ID,
+and checks the called sample count in every selected population. It retains
+valid equal-frequency statistics and audits explicitly requested exclusions.
+Its method is WC84 theta plus OutFLANK's corresponding uncorrected components
+(Weir & Cockerham, 1984; Whitlock & Lotterhos, 2015).
+
+The writer **does not repair downstream OutFLANK fitting**, determine whether
+the null model fits a study, or establish selection. This review is not an
+end-to-end validation of dartR's scan. qvalue was unavailable in the test
+environment, so wrapper conversion/postprocessing was isolated from fitting.
+Do not infer that ordinary-case results are all incorrect from these tests.
+
+Source files: [wrapper](https://github.com/green-striped-gecko/dartR.popgen/blob/a4d19fe9d30498c17369200a24c5c3094c24aa2a/R/gl.outflank.r),
+[diploid helpers](https://github.com/green-striped-gecko/dartR.popgen/blob/a4d19fe9d30498c17369200a24c5c3094c24aa2a/R/utils.outflank.diploids.r),
+[likelihood](https://github.com/green-striped-gecko/dartR.popgen/blob/a4d19fe9d30498c17369200a24c5c3094c24aa2a/R/utils.outflank.likelihood.r).
+
 ## Recommendation
 
 Prefer a tested VCF/GDS workflow when retaining genomic coordinates and genotype
@@ -295,6 +375,15 @@ formats, information such as likelihoods may be unrepresentable regardless of
 the converter. Keep the original VCF as the source of record.
 
 ## References
+
+Weir, B. S., & Cockerham, C. C. (1984). Estimating F-statistics for the
+analysis of population structure. *Evolution*, 38, 1358–1370.
+<https://doi.org/10.1111/j.1558-5646.1984.tb05657.x>.
+
+Whitlock, M. C., & Lotterhos, K. E. (2015). Reliable detection of loci
+responsible for local adaptation: inference of a null model through trimming
+the distribution of FST. *The American Naturalist*, 186(S1), S24–S36.
+<https://doi.org/10.1086/682949>.
 
 Jones, O. R., & Wang, J. (2010). COLONY: a program for parentage and sibship
 inference from multilocus genotype data. *Molecular Ecology Resources*, 10,

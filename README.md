@@ -7,7 +7,7 @@
 state and is being actively
 developed.](http://www.repostatus.org/badges/latest/active.svg)](http://www.repostatus.org/#active)
 [![packageversion](https://img.shields.io/badge/Package%20version-0.0.0.9000-orange.svg)](commits/master)
-[![Last-changedate](https://img.shields.io/badge/last%20change-2026--09--04-brightgreen.svg)](/commits/master)
+[![Last-changedate](https://img.shields.io/badge/last%20change-2026--09--05-brightgreen.svg)](/commits/master)
 <!-- badges: end -->
 
 `genometranslator` reads, standardizes, and writes individual genomic
@@ -49,6 +49,26 @@ Use `tidy_genome()` only when an in-memory table is genuinely needed:
 ``` r
 genotypes <- genometranslator::tidy_genome(data = genome)
 ```
+
+## Prepare an OutFLANK scan
+
+`write_outflank()` calculates corrected and uncorrected population FST
+components directly from diploid biallelic GDS calls, reading loci in
+blocks. It writes the OutFLANK statistics table and sample, population
+and locus audits. Filenames include a `YYYYMMDD@HHMM` timestamp;
+existing files are never replaced. Population metadata are matched by
+sample ID. The default stops on insufficient per-population calls or
+monomorphic loci; explicit exclusions are audited.
+
+``` r
+exported <- genometranslator::write_outflank(
+  data = "study.gds", strata = "samples.tsv", filename = "study"
+)
+```
+
+See `?write_outflank` for assumptions, references and the downstream
+example. The writer does not run a selection scan or fix downstream
+OutFLANK issues.
 
 ## Installation
 
@@ -162,7 +182,7 @@ or DOI is available:
 > Gosselin, T. (2026). *genometranslator: Read, standardize and
 > translate genomic data*. R package version 0.0.0.9000.
 > <https://github.com/thierrygosselin/genometranslator>. Accessed
-> 2026-09-04.
+> 2026-09-05.
 
 ## Website and support
 

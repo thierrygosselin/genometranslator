@@ -36,13 +36,48 @@ write_bayescan(
 A list of files, pop.dictionary and markers.dictionary.
 }
 \description{
-Write codominant population allele counts directly from GDS.
+Convert genotypes stored in GDS into the population allele-count
+format required by BayeScan. The export preserves multiallelic loci, uses one
+common allele dictionary across populations, and writes dictionaries that map
+BayeScan's integer population and locus identifiers back to the GDS metadata.
 }
 \details{
-Requires polymorphic loci with called genotypes in every selected
-population. Violations are errors, never silent filtering. Multiallelic
-allele counts retain a common dictionary across populations; missing calls
-contribute no genes. Partial calls are rejected. GDS filters are restored.
+\strong{Export safeguards:}
+\itemize{
+\item Population membership is obtained from the GDS individual metadata or
+the supplied \code{strata} table. At least two populations are required.
+\item Every exported locus must be polymorphic and have called genotypes in
+every selected population. Violations stop the export; loci are not silently
+removed.
+\item Missing diploid genotypes contribute no allele copies. Partial diploid
+calls are rejected because they cannot be represented unambiguously as
+population allele counts.
+\item Alleles are counted as non-negative integers using a single allele
+dictionary for every population. This prevents population-specific allele
+ordering from changing the biological meaning of a count column.
+\item Population and marker dictionaries accompany the input file because
+BayeScan replaces their original identifiers with consecutive integers.
+\item Existing GDS selections are restored when the export finishes.
+}
+
+These checks are deliberately stricter than BayeScan 2.1's native input
+reader. The BayeScan reader assumes that population blocks are complete and
+that the declared allele classes and their ordering are consistent among
+populations; it does not comprehensively validate malformed, negative, or
+internally inconsistent allele counts. Creating the input with this function
+therefore reduces the risk of a malformed file being accepted or interpreted
+incorrectly. It does not establish that BayeScan's statistical model is
+appropriate for the study design.
+
+\strong{Interpretation:}
+BayeScan is a legacy FST-outlier method based on a multinomial-Dirichlet
+population model. Hierarchical structure, isolation by distance, admixture,
+bottlenecks, uneven sampling, linked variants, and other departures from its
+model can affect power or produce false candidates. Dense linked SNPs should
+not be interpreted as independent confirmation of selection. BayeScan should
+be used as a complementary sensitivity analysis, with important candidates
+compared against structure-aware, environmental-association, haplotype-aware,
+or simulation-based approaches appropriate to the study.
 }
 \examples{
 \dontrun{
@@ -53,6 +88,15 @@ write_bayescan("study.gds", strata = "samples.tsv", filename = "study")
 Foll M, Gaggiotti O (2008). A genome-scan method to identify
 selected loci appropriate for both dominant and codominant markers:
 a Bayesian perspective. Genetics 180:977-993.
+\doi{10.1534/genetics.108.092221}
+
+Lotterhos KE, Whitlock MC (2014). Evaluation of demographic history and
+neutral parameterization on the performance of FST outlier tests. Molecular
+Ecology 23:2178-2192. \doi{10.1111/mec.12725}
+
+de Villemereuil P, Frichot E, Bazin E, Francois O, Gaggiotti OE (2014).
+Genome scan methods against more complex models: when and how much should we
+trust them? Molecular Ecology 23:2006-2019. \doi{10.1111/mec.12705}
 }
 \seealso{
 \href{https://github.com/mfoll/BayeScan}{BayeScan format specification}
